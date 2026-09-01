@@ -1,0 +1,671 @@
+const STORAGE_KEY = "registro_curso_v1";
+const LIMITE_FALTAS = 5;
+
+function loadData() {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (!parsed.maxGroupSize) parsed.maxGroupSize = 4; // compatibilidad con datos viejos
+      return parsed;
+    } catch (e) { /* fall through */ }
+  }
+  return { students: [], groups: [], attendance: {}, tps: [], submissions: {}, nextId: 1, maxGroupSize: 4 };
+}
+
+function saveData() { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }
+
+let data = loadData();
+let view = "panel";
+let selectedPick = [];
+window.getSelectedPick = () => selectedPick; // util interno, no afecta la app
+window.data = data;
+
+function newId() { return data.nextId++; }
+
+function initials(name) {
+  return name.trim().split(/\s+/).slice(0, 2).map(w => w[0].toUpperCase()).join("");
+}
+
+function statusLabel(status) {
+  if (status === "al_dia") return "Al dia";
+  if (status === "riesgo") return "En riesgo";
+  return "Libre";
+}
+
+function faltasFor(studentId) {
+  let count = 0;
+  Object.values(data.attendance).forEach(day => {
+    if (day[studentId] === false) count++;
+  });
+  return count;
+}
+
+function statusFor(faltas) {
+  if (faltas >= LIMITE_FALTAS) return "libre";
+  if (faltas >= LIMITE_FALTAS - 2) return "riesgo";
+  return "al_dia";
+}
+
+function groupNameFor(student) {
+  const g = data.groups.find(g => g.id === student.groupId);
+  return g ? g.name : null;
+}
+
+function studentsWithInfo() {
+  return data.students
+    .map(s => {
+      const faltas = faltasFor(s.id);
+      const tps = data.tps.map(tp => ({
+        tp_id: tp.id,
+        tp_name: tp.name,
+        submitted: !!(data.submissions[tp.id] && data.submissions[tp.id][s.id]),
+      }));
+      return {
+        ...s,
+        faltas,
+        status: statusFor(faltas),
+        group_name: groupNameFor(s),
+        tps,
+      };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name, "es"));
+}
+
+function emptyState(msg) { return `<div class="empty-state">${msg}</div>`; }
+
+// Evita que un doble toque / doble clic dispare la accion dos veces
+function debounceClick(fn, delay = 500) {
+  let last = 0;
+  return function (...args) {
+    const now = Date.now();
+    if (now - last < delay) return;
+    last = now;
+    fn.apply(this, args);
+  };
+}
+
+function nameTaken(list, name, excludeId = null) {
+  const n = name.trim().toLowerCase();
+  return list.some(item => item.id !== excludeId && item.name.trim().toLowerCase() === n);
+}
+
+// ---------- Iconos SVG (inline, sin depender de internet) ----------
+
+const ICON_CHECK = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="4.5 12.5 9.5 17.5 19.5 6.5"/></svg>';
+const ICON_X = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>';
+const ICON_TRASH = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 20 7"/><path d="M6.5 7V5a1.5 1.5 0 0 1 1.5-1.5h8A1.5 1.5 0 0 1 17.5 5v2"/><path d="M6.5 7l1 12.5A1.5 1.5 0 0 0 9 21h6a1.5 1.5 0 0 0 1.5-1.5L17.5 7"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>';
+
+// ---------- Notificaciones propias (reemplazan alert / confirm) ----------
+
+function showToast(message, type = "success") {
+  const container = document.getElementById("toast-container");
+  const toast = document.createElement("div");
+  toast.className = `toast ${type}`;
+  toast.textContent = message;
+  container.appendChild(toast);
+  (window.requestAnimationFrame || function (cb) { setTimeout(cb, 16); })(() => toast.classList.add("show"));
+  setTimeout(() => {
+    toast.classList.remove("show");
+    setTimeout(() => toast.remove(), 250);
+  }, 3200);
+}
+
+function showConfirm(message, okLabel = "Eliminar") {
+  return new Promise(resolve => {
+    const overlay = document.getElementById("confirm-overlay");
+    document.getElementById("confirm-message").textContent = message;
+    const okBtn = document.getElementById("confirm-ok");
+    const cancelBtn = document.getElementById("confirm-cancel");
+    okBtn.textContent = okLabel;
+    overlay.classList.remove("hidden");
+
+    function cleanup(result) {
+      overlay.classList.add("hidden");
+      okBtn.removeEventListener("click", onOk);
+      cancelBtn.removeEventListener("click", onCancel);
+      overlay.removeEventListener("click", onOverlay);
+      resolve(result);
+    }
+    function onOk() { cleanup(true); }
+    function onCancel() { cleanup(false); }
+    function onOverlay(e) { if (e.target === overlay) cleanup(false); }
+
+    okBtn.addEventListener("click", onOk);
+    cancelBtn.addEventListener("click", onCancel);
+    overlay.addEventListener("click", onOverlay);
+  });
+}
+
+
+
+// ---------- Navigation ----------
+
+document.querySelectorAll(".nav-item").forEach(btn => {
+  btn.addEventListener("click", () => switchView(btn.dataset.view));
+});
+
+const titles = {
+  panel: ["Panel del curso", "Vista general de asistencia y trabajos practicos"],
+  alumnos: ["Alumnos", "Cargar y administrar el listado del curso"],
+  asistencia: ["Tomar asistencia", "Se guarda por fecha, miercoles y viernes"],
+  tps: ["Trabajos practicos", "Marca entregas por grupo o individuales"],
+  grupos: ["Grupos", "Se arman una vez y quedan fijos"],
+};
+
+function switchView(v) {
+  view = v;
+  document.querySelectorAll(".nav-item").forEach(b => b.classList.toggle("active", b.dataset.view === v));
+  document.querySelectorAll(".view").forEach(el => el.classList.add("hidden"));
+  document.getElementById(`view-${v}`).classList.remove("hidden");
+  document.getElementById("view-title").textContent = titles[v][0];
+  document.getElementById("view-sub").textContent = titles[v][1];
+
+  if (v === "panel") renderPanel();
+  if (v === "alumnos") renderStudentsTable();
+  if (v === "asistencia") renderAttendance();
+  if (v === "tps") renderTpList();
+  if (v === "grupos") { selectedPick = []; syncGroupSizeUI(); renderGroupPicker(); renderGroupList(); }
+}
+
+function syncGroupSizeUI() {
+  const select = document.getElementById("max-group-size");
+  select.value = String(data.maxGroupSize);
+  document.getElementById("group-size-hint").textContent = `Elegi hasta ${data.maxGroupSize} integrante${data.maxGroupSize === 1 ? "" : "s"} para el nuevo grupo.`;
+}
+
+document.getElementById("max-group-size").addEventListener("change", e => {
+  data.maxGroupSize = Number(e.target.value);
+  selectedPick = selectedPick.slice(0, data.maxGroupSize);
+  saveData();
+  document.getElementById("group-size-hint").textContent = `Elegi hasta ${data.maxGroupSize} integrante${data.maxGroupSize === 1 ? "" : "s"} para el nuevo grupo.`;
+  renderGroupPicker();
+});
+
+// ---------- Panel ----------
+
+function renderPanel() {
+  const students = studentsWithInfo();
+  const total = students.length;
+  const al_dia = students.filter(s => s.status === "al_dia").length;
+  const riesgo = students.filter(s => s.status === "riesgo").length;
+  const libre = students.filter(s => s.status === "libre").length;
+
+  const ICON_USERS = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><circle cx="16.5" cy="9" r="2.3"/><path d="M3.5 20c0-3.3 2.5-6 6-6s6 2.7 6 6"/><path d="M14.5 14.3c2.2.3 3.9 2.3 3.9 4.7"/></svg>';
+  const ICON_CHECK_CIRCLE = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M8 12.3l2.6 2.6L16.2 9"/></svg>';
+  const ICON_CLOCK = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>';
+  const ICON_X_CIRCLE = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><line x1="9.2" y1="9.2" x2="14.8" y2="14.8"/><line x1="14.8" y1="9.2" x2="9.2" y2="14.8"/></svg>';
+
+  document.getElementById("stat-grid").innerHTML = `
+    <div class="stat-card" data-idx="01"><div class="stat-icon">${ICON_USERS}</div><div><p class="stat-label">Alumnos</p><p class="stat-value">${total}</p></div></div>
+    <div class="stat-card success" data-idx="02"><div class="stat-icon">${ICON_CHECK_CIRCLE}</div><div><p class="stat-label">Al dia</p><p class="stat-value">${al_dia}</p></div></div>
+    <div class="stat-card warn" data-idx="03"><div class="stat-icon">${ICON_CLOCK}</div><div><p class="stat-label">En riesgo</p><p class="stat-value">${riesgo}</p></div></div>
+    <div class="stat-card danger" data-idx="04"><div class="stat-icon">${ICON_X_CIRCLE}</div><div><p class="stat-label">Libres</p><p class="stat-value">${libre}</p></div></div>
+  `;
+  renderPanelTable(students);
+}
+
+function renderPanelTable(students) {
+  const tpNames = data.tps.map(t => t.name);
+  let html = `<table><thead><tr>
+    <th>Alumno</th><th>Grupo</th><th class="text-center">Faltas</th>
+    ${tpNames.map(n => `<th class="text-center">${n}</th>`).join("")}
+    <th class="text-center">Estado</th>
+  </tr></thead><tbody>`;
+  students.forEach(s => {
+    html += `<tr>
+      <td><div class="name-cell" onclick="openProfile(${s.id})"><div class="avatar ${s.status}">${initials(s.name)}</div>${s.name}</div></td>
+      <td>${s.group_name || "Individual"}</td>
+      <td class="text-center faltas-count">${s.faltas}</td>
+      ${s.tps.map(t => `<td class="text-center">${t.submitted ? `<span class="check-yes">${ICON_CHECK}</span>` : `<span class="check-no">${ICON_X}</span>`}</td>`).join("")}
+      <td class="text-center"><span class="status-pill ${s.status}">${statusLabel(s.status)}</span></td>
+    </tr>`;
+  });
+  html += "</tbody></table>";
+  document.getElementById("table-panel").innerHTML = students.length ? html : emptyState("Todavia no cargaste alumnos. Anda a la seccion Alumnos para empezar.");
+}
+
+document.getElementById("search-panel").addEventListener("input", e => {
+  const q = e.target.value.toLowerCase();
+  renderPanelTable(studentsWithInfo().filter(s => s.name.toLowerCase().includes(q)));
+});
+
+document.getElementById("btn-export").addEventListener("click", exportCsv);
+
+function exportCsv() {
+  const students = studentsWithInfo();
+  const tpNames = data.tps.map(t => t.name);
+  const header = ["Alumno", "Grupo", "Faltas", "Estado", ...tpNames];
+  const rows = students.map(s => [
+    s.name,
+    s.group_name || "Individual",
+    s.faltas,
+    statusLabel(s.status),
+    ...s.tps.map(t => (t.submitted ? "Si" : "No")),
+  ]);
+  const csv = [header, ...rows].map(r => r.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(",")).join("\r\n");
+  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `asistencia_${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ---------- Alumnos ----------
+
+function renderStudentsTable() {
+  const students = studentsWithInfo();
+  let html = `<table><thead><tr>
+    <th>Alumno</th><th>Grupo</th><th class="text-center">Faltas</th><th class="text-center">Estado</th><th></th>
+  </tr></thead><tbody>`;
+  students.forEach(s => {
+    html += `<tr>
+      <td><div class="name-cell" onclick="openProfile(${s.id})"><div class="avatar ${s.status}">${initials(s.name)}</div>${s.name}</div></td>
+      <td>${s.group_name || "Individual"}</td>
+      <td class="text-center faltas-count">${s.faltas}</td>
+      <td class="text-center"><span class="status-pill ${s.status}">${statusLabel(s.status)}</span></td>
+      <td class="text-center"><button class="link-btn" onclick="deleteStudent(${s.id})">${ICON_TRASH} Eliminar</button></td>
+    </tr>`;
+  });
+  html += "</tbody></table>";
+  document.getElementById("table-alumnos").innerHTML = students.length ? html : emptyState("Agrega tu primer alumno con el boton de arriba.");
+}
+
+document.getElementById("btn-add-student").addEventListener("click", debounceClick(() => {
+  const input = document.getElementById("new-student-name");
+  const name = input.value.trim();
+  if (!name) { showToast("Escribi el nombre del alumno", "error"); return; }
+  if (nameTaken(data.students, name)) { showToast("Ya existe un alumno cargado con ese nombre.", "error"); return; }
+  data.students.push({ id: newId(), name, groupId: null, notes: "" });
+  saveData();
+  input.value = "";
+  renderStudentsTable();
+}));
+
+document.getElementById("new-student-name").addEventListener("keydown", e => {
+  if (e.key === "Enter") document.getElementById("btn-add-student").click();
+});
+
+function cleanBulkLine(line) {
+  // Quita numeracion tipo "1." "2-" "3_" "12)" al inicio de la linea
+  return line.replace(/^\s*\d+\s*[\.\-_\):]\s*/, "").trim();
+}
+
+document.getElementById("btn-bulk-add").addEventListener("click", debounceClick(() => {
+  const textarea = document.getElementById("bulk-students");
+  const lines = textarea.value.split("\n").map(cleanBulkLine).filter(l => l.length > 0);
+  if (!lines.length) { showToast("Pega al menos un nombre, uno por linea", "error"); return; }
+
+  const existing = new Set(data.students.map(s => s.name.toLowerCase()));
+  let added = 0;
+  let skipped = 0;
+  lines.forEach(name => {
+    if (existing.has(name.toLowerCase())) { skipped++; return; }
+    data.students.push({ id: newId(), name, groupId: null, notes: "" });
+    existing.add(name.toLowerCase());
+    added++;
+  });
+  saveData();
+  textarea.value = "";
+  renderStudentsTable();
+  showToast(`Se agregaron ${added} alumnos.` + (skipped ? ` (${skipped} ya estaban cargados y se omitieron)` : ""), "success");
+}));
+
+async function deleteStudent(id) {
+  const ok = await showConfirm("Eliminar este alumno y todo su historial?");
+  if (!ok) return;
+  data.students = data.students.filter(s => s.id !== id);
+  Object.values(data.attendance).forEach(day => { delete day[id]; });
+  Object.values(data.submissions).forEach(sub => { delete sub[id]; });
+  saveData();
+  renderStudentsTable();
+}
+
+// ---------- Asistencia ----------
+
+function todayStr() { return new Date().toISOString().slice(0, 10); }
+
+function renderAttendance() {
+  const dateInput = document.getElementById("attendance-date");
+  if (!dateInput.value) dateInput.value = todayStr();
+  dateInput.onchange = renderAttendanceList;
+  renderAttendanceList();
+}
+
+// ---------- Pestañas: Tomar asistencia / Historial ----------
+
+document.getElementById("tab-tomar").addEventListener("click", () => switchAttendanceTab("tomar"));
+document.getElementById("tab-historial").addEventListener("click", () => switchAttendanceTab("historial"));
+
+function switchAttendanceTab(tab) {
+  document.getElementById("tab-tomar").classList.toggle("active", tab === "tomar");
+  document.getElementById("tab-historial").classList.toggle("active", tab === "historial");
+  document.getElementById("asistencia-tomar-panel").classList.toggle("hidden", tab !== "tomar");
+  document.getElementById("asistencia-historial-panel").classList.toggle("hidden", tab !== "historial");
+  if (tab === "historial") renderAttendanceHistory();
+}
+
+function goToDate(date) {
+  switchAttendanceTab("tomar");
+  document.getElementById("attendance-date").value = date;
+  renderAttendanceList();
+}
+
+function formatDateShort(dateStr) {
+  const [y, m, d] = dateStr.split("-");
+  return `${d}/${m}`;
+}
+
+function renderAttendanceHistory() {
+  const query = (document.getElementById("search-historial").value || "").toLowerCase();
+  const dates = Object.keys(data.attendance).sort();
+  const container = document.getElementById("table-historial");
+
+  if (!data.students.length) { container.innerHTML = emptyState("Todavia no hay alumnos cargados."); return; }
+  if (!dates.length) { container.innerHTML = emptyState("Todavia no tomaste asistencia ningun dia."); return; }
+
+  const students = data.students
+    .filter(s => s.name.toLowerCase().includes(query))
+    .slice()
+    .sort((a, b) => a.name.localeCompare(b.name, "es"));
+
+  if (!students.length) { container.innerHTML = emptyState("No se encontraron alumnos con ese nombre."); return; }
+
+  let html = '<div class="history-table-wrap"><table class="history-table"><thead><tr>';
+  html += '<th class="sticky-col">Alumno</th>';
+  dates.forEach(date => {
+    html += `<th class="date-col text-center" onclick="goToDate('${date}')" title="Abrir asistencia del ${date}">${formatDateShort(date)}</th>`;
+  });
+  html += '<th class="text-center">Faltas</th></tr></thead><tbody>';
+
+  students.forEach(s => {
+    html += `<tr><td class="sticky-col"><div class="name-cell" onclick="openProfile(${s.id})"><div class="avatar al_dia">${initials(s.name)}</div>${s.name}</div></td>`;
+    let faltas = 0;
+    dates.forEach(date => {
+      const dayRecord = data.attendance[date];
+      const hasRecord = Object.prototype.hasOwnProperty.call(dayRecord, s.id);
+      let mark;
+      if (!hasRecord) {
+        mark = `<span class="hist-mark" style="background:var(--surface-2); color:var(--text-muted);">&mdash;</span>`;
+      } else if (dayRecord[s.id] === false) {
+        faltas++;
+        mark = `<span class="hist-mark absent">${ICON_X}</span>`;
+      } else {
+        mark = `<span class="hist-mark present">${ICON_CHECK}</span>`;
+      }
+      html += `<td class="text-center">${mark}</td>`;
+    });
+    html += `<td class="text-center faltas-count">${faltas}</td></tr>`;
+  });
+
+  html += '</tbody></table></div>';
+  container.innerHTML = html;
+}
+
+document.getElementById("search-historial").addEventListener("input", renderAttendanceHistory);
+
+function renderAttendanceList() {
+  const date = document.getElementById("attendance-date").value;
+  const dayRecord = data.attendance[date] || {};
+  const list = document.getElementById("attendance-list");
+  if (!data.students.length) { list.innerHTML = emptyState("Todavia no hay alumnos cargados."); return; }
+
+  list.innerHTML = data.students
+    .slice()
+    .sort((a, b) => a.name.localeCompare(b.name, "es"))
+    .map(s => {
+      const present = dayRecord[s.id] !== undefined ? dayRecord[s.id] : true;
+      return `
+      <div class="attendance-row" data-id="${s.id}">
+        <div class="attendance-name"><div class="avatar al_dia">${initials(s.name)}</div>${s.name}</div>
+        <div class="toggle-group">
+          <button class="toggle-btn present ${present ? "active" : ""}" onclick="setPresent(${s.id}, true)">${ICON_CHECK} Presente</button>
+          <button class="toggle-btn absent ${!present ? "active" : ""}" onclick="setPresent(${s.id}, false)">${ICON_X} Ausente</button>
+        </div>
+      </div>`;
+    }).join("");
+}
+
+const pendingAttendance = {};
+
+function setPresent(id, present) {
+  pendingAttendance[id] = present;
+  const row = document.querySelector(`.attendance-row[data-id="${id}"]`);
+  row.querySelector(".present").classList.toggle("active", present);
+  row.querySelector(".absent").classList.toggle("active", !present);
+}
+
+document.getElementById("btn-save-attendance").addEventListener("click", debounceClick(() => {
+  const date = document.getElementById("attendance-date").value;
+  if (!date) { showToast("Elegi una fecha", "error"); return; }
+  const rows = document.querySelectorAll(".attendance-row");
+  if (!rows.length) { showToast("Todavia no hay alumnos cargados.", "error"); return; }
+  if (!data.attendance[date]) data.attendance[date] = {};
+  rows.forEach(row => {
+    const id = Number(row.dataset.id);
+    const present = row.querySelector(".present").classList.contains("active");
+    data.attendance[date][id] = pendingAttendance[id] !== undefined ? pendingAttendance[id] : present;
+  });
+  saveData();
+  showToast("Asistencia guardada", "success");
+}));
+
+// ---------- TPs ----------
+
+function renderTpList() {
+  const container = document.getElementById("tp-list");
+  if (!data.tps.length) { container.innerHTML = emptyState("Todavia no cargaste ningun TP."); return; }
+
+  const individuals = data.students.filter(s => !s.groupId).sort((a, b) => a.name.localeCompare(b.name, "es"));
+  const groups = data.groups.slice().sort((a, b) => a.name.localeCompare(b.name, "es"));
+
+  container.innerHTML = data.tps.map(tp => `
+    <div class="tp-block">
+      <div class="tp-block-head">
+        <p class="tp-block-title">${tp.name}</p>
+        <div style="display:flex; align-items:center; gap:14px;">
+          <span class="tp-block-date">${tp.date || ""}</span>
+          <button class="tp-del" onclick="deleteTp(${tp.id})">${ICON_TRASH} Eliminar</button>
+        </div>
+      </div>
+      <div class="tp-members">
+        ${groups.map(g => {
+          const members = data.students.filter(s => s.groupId === g.id);
+          if (!members.length) return "";
+          const submitted = members.length && members.every(m => !!(data.submissions[tp.id] && data.submissions[tp.id][m.id]));
+          const repId = members[0].id;
+          return `<div class="tp-row group-row ${submitted ? "submitted" : ""}" onclick="toggleTpSubmission(${tp.id}, ${repId})">
+            <div class="tp-row-info">
+              <div class="avatar al_dia">${initials(g.name)}</div>
+              <div class="tp-row-text">
+                <p class="tp-row-name">${g.name}</p>
+                <p class="tp-row-sub">${members.map(m => m.name).join(", ")}</p>
+              </div>
+            </div>
+            <div class="tp-status"><span class="tp-status-dot"></span>${submitted ? "Entregado" : "Pendiente"}</div>
+          </div>`;
+        }).join("")}
+        ${individuals.map(s => {
+          const submitted = !!(data.submissions[tp.id] && data.submissions[tp.id][s.id]);
+          return `<div class="tp-row ${submitted ? "submitted" : ""}" onclick="toggleTpSubmission(${tp.id}, ${s.id})">
+            <div class="tp-row-info">
+              <div class="avatar al_dia">${initials(s.name)}</div>
+              <div class="tp-row-text"><p class="tp-row-name">${s.name}</p></div>
+            </div>
+            <div class="tp-status"><span class="tp-status-dot"></span>${submitted ? "Entregado" : "Pendiente"}</div>
+          </div>`;
+        }).join("")}
+        ${(!groups.some(g => data.students.some(s => s.groupId === g.id)) && !individuals.length) ? emptyState("Todavia no hay alumnos cargados.") : ""}
+      </div>
+    </div>
+  `).join("");
+}
+
+function toggleTpSubmission(tpId, studentId) {
+  if (!data.submissions[tpId]) data.submissions[tpId] = {};
+  const current = !!data.submissions[tpId][studentId];
+  const newValue = !current;
+
+  const student = data.students.find(s => s.id === studentId);
+  let ids = [studentId];
+  if (student.groupId) {
+    ids = data.students.filter(s => s.groupId === student.groupId).map(s => s.id);
+  }
+  ids.forEach(id => { data.submissions[tpId][id] = newValue; });
+  saveData();
+  renderTpList();
+}
+
+async function deleteTp(id) {
+  const ok = await showConfirm("Eliminar este TP?");
+  if (!ok) return;
+  data.tps = data.tps.filter(t => t.id !== id);
+  delete data.submissions[id];
+  saveData();
+  renderTpList();
+}
+
+document.getElementById("btn-add-tp").addEventListener("click", debounceClick(() => {
+  const input = document.getElementById("new-tp-name");
+  const name = input.value.trim();
+  if (!name) { showToast("Escribi el nombre del TP", "error"); return; }
+  if (nameTaken(data.tps, name)) { showToast("Ya existe un TP cargado con ese nombre.", "error"); return; }
+  data.tps.push({ id: newId(), name, date: todayStr() });
+  saveData();
+  input.value = "";
+  renderTpList();
+}));
+
+document.getElementById("new-tp-name").addEventListener("keydown", e => {
+  if (e.key === "Enter") document.getElementById("btn-add-tp").click();
+});
+
+// ---------- Grupos ----------
+
+function renderGroupPicker() {
+  const grouped = new Set(data.students.filter(s => s.groupId).map(s => s.id));
+  const available = data.students.filter(s => !grouped.has(s.id));
+  const picker = document.getElementById("group-picker");
+  if (!available.length) { picker.innerHTML = emptyState("Todos los alumnos ya estan en un grupo, o todavia no cargaste alumnos."); return; }
+  picker.innerHTML = available.map(s => `
+    <div class="pick-chip ${selectedPick.includes(s.id) ? "selected" : ""}" onclick="togglePick(${s.id})">
+      <span class="pick-chip-box">&#10003;</span>${s.name}
+    </div>
+  `).join("");
+}
+
+function togglePick(id) {
+  if (selectedPick.includes(id)) {
+    selectedPick = selectedPick.filter(x => x !== id);
+  } else {
+    if (selectedPick.length >= data.maxGroupSize) { showToast(`Un grupo puede tener hasta ${data.maxGroupSize} integrante${data.maxGroupSize === 1 ? "" : "s"}`, "error"); return; }
+    selectedPick.push(id);
+  }
+  renderGroupPicker();
+}
+
+function renderGroupList() {
+  const list = document.getElementById("group-list");
+  if (!data.groups.length) { list.innerHTML = emptyState("Todavia no armaste grupos."); return; }
+  list.innerHTML = data.groups.map(g => {
+    const members = data.students.filter(s => s.groupId === g.id);
+    return `
+    <div class="group-card">
+      <div class="group-card-head">
+        <div class="group-card-icon">${initials(g.name)}</div>
+        <div>
+          <p class="group-card-name">${g.name}</p>
+          <p class="group-card-members">${members.map(m => m.name).join(", ") || "Sin integrantes"}</p>
+        </div>
+      </div>
+      <button class="link-btn" onclick="deleteGroup(${g.id})">${ICON_TRASH} Eliminar</button>
+    </div>`;
+  }).join("");
+}
+
+document.getElementById("btn-add-group").addEventListener("click", debounceClick(() => {
+  const input = document.getElementById("new-group-name");
+  const name = input.value.trim();
+  if (!name) { showToast("Escribi el nombre del grupo", "error"); return; }
+  if (nameTaken(data.groups, name)) { showToast("Ya existe un grupo con ese nombre.", "error"); return; }
+  if (!selectedPick.length) { showToast("Elegi al menos un integrante", "error"); return; }
+  const groupId = newId();
+  data.groups.push({ id: groupId, name });
+  selectedPick.forEach(sid => {
+    const student = data.students.find(s => s.id === sid);
+    if (student) student.groupId = groupId;
+  });
+  saveData();
+  input.value = "";
+  selectedPick = [];
+  renderGroupPicker();
+  renderGroupList();
+}));
+
+async function deleteGroup(id) {
+  const ok = await showConfirm("Eliminar este grupo? Los alumnos quedan como individuales.");
+  if (!ok) return;
+  data.students.forEach(s => { if (s.groupId === id) s.groupId = null; });
+  data.groups = data.groups.filter(g => g.id !== id);
+  saveData();
+  renderGroupPicker();
+  renderGroupList();
+}
+
+// ---------- Student profile modal ----------
+
+function openProfile(id) {
+  const s = studentsWithInfo().find(x => x.id === id);
+  if (!s) return;
+  const overlay = document.getElementById("modal-overlay");
+  document.getElementById("modal-content").innerHTML = `
+    <button class="modal-close" onclick="closeModal()">Cerrar</button>
+    <div style="display:flex; align-items:center; gap:13px; margin-bottom:18px;">
+      <div class="avatar ${s.status}" style="width:46px;height:46px;font-size:15px;">${initials(s.name)}</div>
+      <div>
+        <p style="font-family: var(--font-display); font-weight:700; font-size:17px; margin:0;">${s.name}</p>
+        <p class="muted" style="margin:2px 0 0;">${s.group_name || "Individual"}</p>
+      </div>
+    </div>
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:11px; margin-bottom:18px;">
+      <div class="stat-card"><p class="stat-label">Faltas</p><p class="stat-value">${s.faltas} / ${LIMITE_FALTAS}</p></div>
+      <div class="stat-card"><p class="stat-label">Estado</p><p class="stat-value" style="font-size:17px;">${statusLabel(s.status)}</p></div>
+    </div>
+    <p style="font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-secondary); margin: 0 0 9px;">Trabajos practicos</p>
+    <div style="display:flex; flex-direction:column; gap:6px; margin-bottom:20px;">
+      ${s.tps.length ? s.tps.map(t => `
+        <div style="display:flex; justify-content:space-between; font-size:13.5px; padding:7px 0; border-bottom:1px solid var(--line);">
+          <span>${t.tp_name}</span>
+          <span class="${t.submitted ? "check-yes" : "check-no"}">${t.submitted ? "Entregado" : "Pendiente"}</span>
+        </div>`).join("") : '<p class="muted small">Todavia no hay TPs cargados.</p>'}
+    </div>
+    <p style="font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-secondary); margin: 0 0 9px;">Observaciones</p>
+    <textarea id="notes-field" style="width:100%; min-height:76px; border:1px solid var(--line); border-radius:9px; padding:9px 11px; font-family: var(--font-body); font-size:13.5px; resize:vertical;">${s.notes || ""}</textarea>
+    <div style="display:flex; justify-content:flex-end; margin-top:11px;">
+      <button class="btn btn-accent" onclick="saveNotes(${s.id})">Guardar</button>
+    </div>
+  `;
+  overlay.classList.remove("hidden");
+}
+
+function closeModal() { document.getElementById("modal-overlay").classList.add("hidden"); }
+
+function saveNotes(id) {
+  const notes = document.getElementById("notes-field").value;
+  const student = data.students.find(s => s.id === id);
+  if (student) student.notes = notes;
+  saveData();
+  closeModal();
+  if (view === "panel") renderPanel();
+  if (view === "alumnos") renderStudentsTable();
+}
+
+document.getElementById("modal-overlay").addEventListener("click", e => {
+  if (e.target.id === "modal-overlay") closeModal();
+});
+
+// ---------- Init ----------
+
+renderPanel();

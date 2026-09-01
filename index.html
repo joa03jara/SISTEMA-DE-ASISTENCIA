@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Registro de curso</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="favicon.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="theme-color" content="#4d8bff">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Registro">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="app">
+
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-icon"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4.5L3 8.5l9 4 9-4-9-4z"/><path d="M6.5 10.3v5.2c0 1.3 2.5 3 5.5 3s5.5-1.7 5.5-3v-5.2"/></svg></div>
+      <div>
+        <p class="brand-title">Registro</p>
+        <p class="brand-sub">de curso</p>
+      </div>
+    </div>
+
+    <nav class="nav">
+      <button class="nav-item active" data-view="panel"><span class="nav-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="7" height="7" rx="1.3"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.3"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.3"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.3"/></svg></span> Panel</button>
+      <button class="nav-item" data-view="alumnos"><span class="nav-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c0-3.6 3.1-6.5 7-6.5s7 2.9 7 6.5"/></svg></span> Alumnos</button>
+      <button class="nav-item" data-view="asistencia"><span class="nav-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="16" rx="2"/><line x1="3.5" y1="9.5" x2="20.5" y2="9.5"/><line x1="7.5" y1="2.8" x2="7.5" y2="6.2"/><line x1="16.5" y1="2.8" x2="16.5" y2="6.2"/><path d="M8 14l2.3 2.3L16 11"/></svg></span> Asistencia</button>
+      <button class="nav-item" data-view="tps"><span class="nav-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5h8l4 4v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-16a1 1 0 0 1 1-1z"/><path d="M14 3.5v4h4"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="16.5" x2="16" y2="16.5"/></svg></span> Trabajos practicos</button>
+      <button class="nav-item" data-view="grupos"><span class="nav-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9.5" r="2.4"/><path d="M3.5 20c0-3.2 2.5-5.8 5.5-5.8s5.5 2.6 5.5 5.8"/><path d="M15.5 14.6c2.4.2 4.3 2.4 4.3 5"/></svg></span> Grupos</button>
+    </nav>
+
+    <div class="sidebar-footer">
+      <p class="sidebar-footer-label">Limite de faltas</p>
+      <p class="sidebar-footer-value">5 faltas</p>
+      <div class="sidebar-footer-bar"><div class="sidebar-footer-bar-fill" style="width:100%"></div></div>
+      <p class="save-note">Los datos se guardan solos en esta computadora. Usa "Exportar CSV" para tener una copia de respaldo.</p>
+    </div>
+  </aside>
+
+  <main class="main">
+
+    <header class="topbar">
+      <div>
+        <h1 id="view-title">Panel del curso</h1>
+        <p id="view-sub" class="muted"></p>
+      </div>
+      <div class="card-head-actions">
+        <button class="btn" id="btn-export"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5v11"/><path d="M7.5 10.5L12 15l4.5-4.5"/><path d="M4.5 17.5v2a1.5 1.5 0 0 0 1.5 1.5h12a1.5 1.5 0 0 0 1.5-1.5v-2"/></svg> Exportar CSV</button>
+      </div>
+    </header>
+
+    <div class="main-inner">
+
+    <section id="view-panel" class="view">
+      <div class="stat-grid" id="stat-grid"></div>
+      <div class="card">
+        <div class="card-head">
+          <h2>Alumnos del curso</h2>
+          <div class="search-box"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text-muted); flex-shrink:0;"><circle cx="10.5" cy="10.5" r="6.5"/><line x1="15.5" y1="15.5" x2="20.5" y2="20.5"/></svg><input type="text" id="search-panel" placeholder="Buscar alumno..."></div>
+        </div>
+        <div class="table-wrap" id="table-panel"></div>
+      </div>
+    </section>
+
+    <section id="view-alumnos" class="view hidden">
+      <div class="card" style="margin-bottom: 16px;">
+        <div class="card-head">
+          <h2>Carga masiva</h2>
+        </div>
+        <div style="padding: 16px 20px;">
+          <p class="muted small" style="margin: 0 0 10px;">Pega toda la lista de golpe, un alumno por linea (podes copiarla tal cual la tenes escrita a mano, con o sin numeros adelante).</p>
+          <textarea id="bulk-students" class="bulk-textarea" placeholder="Ana Torres&#10;Lucas Fernandez&#10;Martina Gomez&#10;..."></textarea>
+          <div style="display:flex; justify-content:flex-end; margin-top:10px;">
+            <button class="btn btn-accent" id="btn-bulk-add"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Agregar toda la lista</button>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <h2>Alumnos</h2>
+          <div class="card-head-actions">
+            <input type="text" id="new-student-name" placeholder="Nombre y apellido" class="input-inline">
+            <button class="btn btn-accent" id="btn-add-student"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Agregar alumno</button>
+          </div>
+        </div>
+        <div class="table-wrap" id="table-alumnos"></div>
+      </div>
+    </section>
+
+    <section id="view-asistencia" class="view hidden">
+      <div class="tab-switch">
+        <button class="tab-btn active" id="tab-tomar" data-tab="tomar">Tomar asistencia</button>
+        <button class="tab-btn" id="tab-historial" data-tab="historial">Historial del cuatrimestre</button>
+      </div>
+
+      <div id="asistencia-tomar-panel" class="card">
+        <div class="card-head">
+          <h2>Tomar asistencia</h2>
+          <div class="card-head-actions"><input type="date" id="attendance-date" class="input-inline"></div>
+        </div>
+        <div id="attendance-list" class="attendance-list"></div>
+        <div class="card-foot"><button class="btn btn-accent" id="btn-save-attendance">Guardar asistencia</button></div>
+      </div>
+
+      <div id="asistencia-historial-panel" class="card hidden">
+        <div class="card-head">
+          <h2>Historial de asistencia</h2>
+          <div class="search-box"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text-muted); flex-shrink:0;"><circle cx="10.5" cy="10.5" r="6.5"/><line x1="15.5" y1="15.5" x2="20.5" y2="20.5"/></svg><input type="text" id="search-historial" placeholder="Buscar alumno..."></div>
+        </div>
+        <p class="muted small" style="padding: 12px 20px 0;">Toca la fecha de una columna para abrir y editar la asistencia de ese dia.</p>
+        <div class="table-wrap" id="table-historial" style="padding: 10px 0 4px;"></div>
+      </div>
+    </section>
+
+    <section id="view-tps" class="view hidden">
+      <div class="card">
+        <div class="card-head">
+          <h2>Trabajos practicos</h2>
+          <div class="card-head-actions">
+            <input type="text" id="new-tp-name" placeholder="Nombre del TP (ej: TP4 - Base de datos)" class="input-inline wide">
+            <button class="btn btn-accent" id="btn-add-tp"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Nuevo TP</button>
+          </div>
+        </div>
+        <div id="tp-list" class="tp-list"></div>
+      </div>
+    </section>
+
+    <section id="view-grupos" class="view hidden">
+      <div class="card">
+        <div class="card-head">
+          <h2>Grupos</h2>
+          <div class="card-head-actions">
+            <label class="group-size-picker">
+              <span>Integrantes por grupo</span>
+              <select id="max-group-size">
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+                <option value="5">5</option>
+                <option value="6">6</option>
+                <option value="7">7</option>
+                <option value="8">8</option>
+              </select>
+            </label>
+            <input type="text" id="new-group-name" placeholder="Nombre del grupo (ej: Grupo A)" class="input-inline">
+            <button class="btn btn-accent" id="btn-add-group"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Nuevo grupo</button>
+          </div>
+        </div>
+        <p class="muted small" id="group-size-hint" style="padding: 0 20px 6px;">Elegi hasta 4 integrantes para el nuevo grupo.</p>
+        <div id="group-picker" class="group-picker"></div>
+        <div id="group-list" class="group-list"></div>
+      </div>
+    </section>
+
+    </div>
+  </main>
+</div>
+
+<div id="modal-overlay" class="modal-overlay hidden">
+  <div class="modal" id="modal-content"></div>
+</div>
+
+<div id="confirm-overlay" class="modal-overlay hidden">
+  <div class="modal confirm-modal">
+    <p class="confirm-message" id="confirm-message"></p>
+    <div class="confirm-actions">
+      <button class="btn" id="confirm-cancel">Cancelar</button>
+      <button class="btn btn-danger" id="confirm-ok">Eliminar</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast-container" class="toast-container"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
