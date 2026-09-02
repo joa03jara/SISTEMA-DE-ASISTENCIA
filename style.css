@@ -374,7 +374,38 @@
 
   /* ---------- Tablet & touch ---------- */
 
-  @media (max-width: 1024px) {
+  @media (max-width: 1024px) and (min-width: 701px) {
+    .sidebar {
+      width: 84px; padding: 20px 10px; align-items: center;
+    }
+    .brand { flex-direction: column; padding: 0 0 18px; gap: 6px; }
+    .brand-title, .brand-sub { display: none; }
+    .nav-item { flex-direction: column; gap: 5px; padding: 12px 6px; font-size: 9.5px; text-align: center; width: 100%; }
+    .nav-icon { font-size: 20px; }
+    .sidebar-footer { padding-top: 14px; }
+    .sidebar-footer-label, .save-note { display: none; }
+    .sidebar-footer-value { font-size: 11px; text-align: center; }
+
+    .main-inner { padding: 20px 24px 40px; }
+    .topbar { padding: 16px 24px; flex-wrap: wrap; }
+
+    .stat-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+
+    .btn, .toggle-btn, .pick-chip, .tp-row, .nav-item { min-height: 46px; }
+    .btn { padding: 12px 18px; }
+    .toggle-btn { padding: 10px 16px; }
+
+    input, textarea, select { font-size: 16px !important; }
+
+    .card-head { flex-direction: column; align-items: stretch; }
+    .card-head-actions { flex-wrap: wrap; }
+    .input-inline.wide { min-width: 0; width: 100%; }
+    .search-box { min-width: 0; width: 100%; }
+
+    .modal { width: 92vw; padding: 20px; }
+  }
+
+  @media (max-width: 700px) {
     .app { flex-direction: column; }
 
     .sidebar {
