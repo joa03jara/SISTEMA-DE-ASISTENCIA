@@ -3,8 +3,8 @@
   "short_name": "Registro",
   "start_url": "index.html",
   "display": "standalone",
-  "background_color": "#0d1526",
-  "theme_color": "#4d8bff",
+  "background_color": "#f3f5fa",
+  "theme_color": "#2f5fd8",
   "orientation": "any",
   "icons": [
     { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
