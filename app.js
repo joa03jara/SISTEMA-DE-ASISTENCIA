@@ -1,16 +1,51 @@
 const STORAGE_KEY = "registro_curso_v1";
 const LIMITE_FALTAS = 5;
 
+function emptyCourseData() {
+  return { students: [], groups: [], attendance: {}, tps: [], submissions: {}, maxGroupSize: 4 };
+}
+
 function loadData() {
   const raw = localStorage.getItem(STORAGE_KEY);
+  let parsed = null;
   if (raw) {
-    try {
-      const parsed = JSON.parse(raw);
-      if (!parsed.maxGroupSize) parsed.maxGroupSize = 4; // compatibilidad con datos viejos
-      return parsed;
-    } catch (e) { /* fall through */ }
+    try { parsed = JSON.parse(raw); } catch (e) { parsed = null; }
   }
-  return { students: [], groups: [], attendance: {}, tps: [], submissions: {}, nextId: 1, maxGroupSize: 4 };
+
+  if (!parsed) {
+    const firstCourseId = 1;
+    return {
+      version: 2,
+      nextId: 2,
+      currentCourseId: firstCourseId,
+      courses: [{ id: firstCourseId, name: "Mi curso" }],
+      courseData: { [firstCourseId]: emptyCourseData() },
+    };
+  }
+
+  // Migracion automatica: formato viejo (un solo curso, sin "version") -> formato con cursos
+  if (parsed.version !== 2) {
+    const firstCourseId = parsed.nextId ? parsed.nextId + 1 : 1;
+    const migrated = {
+      version: 2,
+      nextId: firstCourseId + 1,
+      currentCourseId: firstCourseId,
+      courses: [{ id: firstCourseId, name: "Mi curso" }],
+      courseData: {
+        [firstCourseId]: {
+          students: parsed.students || [],
+          groups: parsed.groups || [],
+          attendance: parsed.attendance || {},
+          tps: parsed.tps || [],
+          submissions: parsed.submissions || {},
+          maxGroupSize: parsed.maxGroupSize || 4,
+        },
+      },
+    };
+    return migrated;
+  }
+
+  return parsed;
 }
 
 function saveData() { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }
@@ -20,6 +55,11 @@ let view = "panel";
 let selectedPick = [];
 window.getSelectedPick = () => selectedPick; // util interno, no afecta la app
 window.data = data;
+
+function currentCourse() {
+  return data.courseData[data.currentCourseId];
+}
+window.currentCourse = currentCourse;
 
 function newId() { return data.nextId++; }
 
@@ -35,7 +75,7 @@ function statusLabel(status) {
 
 function faltasFor(studentId) {
   let count = 0;
-  Object.values(data.attendance).forEach(day => {
+  Object.values(currentCourse().attendance).forEach(day => {
     if (day[studentId] === false) count++;
   });
   return count;
@@ -48,18 +88,18 @@ function statusFor(faltas) {
 }
 
 function groupNameFor(student) {
-  const g = data.groups.find(g => g.id === student.groupId);
+  const g = currentCourse().groups.find(g => g.id === student.groupId);
   return g ? g.name : null;
 }
 
 function studentsWithInfo() {
-  return data.students
+  return currentCourse().students
     .map(s => {
       const faltas = faltasFor(s.id);
-      const tps = data.tps.map(tp => ({
+      const tps = currentCourse().tps.map(tp => ({
         tp_id: tp.id,
         tp_name: tp.name,
-        submitted: !!(data.submissions[tp.id] && data.submissions[tp.id][s.id]),
+        submitted: !!(currentCourse().submissions[tp.id] && currentCourse().submissions[tp.id][s.id]),
       }));
       return {
         ...s,
@@ -170,15 +210,15 @@ function switchView(v) {
 
 function syncGroupSizeUI() {
   const select = document.getElementById("max-group-size");
-  select.value = String(data.maxGroupSize);
-  document.getElementById("group-size-hint").textContent = `Elegi hasta ${data.maxGroupSize} integrante${data.maxGroupSize === 1 ? "" : "s"} para el nuevo grupo.`;
+  select.value = String(currentCourse().maxGroupSize);
+  document.getElementById("group-size-hint").textContent = `Elegi hasta ${currentCourse().maxGroupSize} integrante${currentCourse().maxGroupSize === 1 ? "" : "s"} para el nuevo grupo.`;
 }
 
 document.getElementById("max-group-size").addEventListener("change", e => {
-  data.maxGroupSize = Number(e.target.value);
-  selectedPick = selectedPick.slice(0, data.maxGroupSize);
+  currentCourse().maxGroupSize = Number(e.target.value);
+  selectedPick = selectedPick.slice(0, currentCourse().maxGroupSize);
   saveData();
-  document.getElementById("group-size-hint").textContent = `Elegi hasta ${data.maxGroupSize} integrante${data.maxGroupSize === 1 ? "" : "s"} para el nuevo grupo.`;
+  document.getElementById("group-size-hint").textContent = `Elegi hasta ${currentCourse().maxGroupSize} integrante${currentCourse().maxGroupSize === 1 ? "" : "s"} para el nuevo grupo.`;
   renderGroupPicker();
 });
 
@@ -206,7 +246,7 @@ function renderPanel() {
 }
 
 function renderPanelTable(students) {
-  const tpNames = data.tps.map(t => t.name);
+  const tpNames = currentCourse().tps.map(t => t.name);
   let html = `<table><thead><tr>
     <th>Alumno</th><th>Grupo</th><th class="text-center">Faltas</th>
     ${tpNames.map(n => `<th class="text-center">${n}</th>`).join("")}
@@ -234,7 +274,7 @@ document.getElementById("btn-export").addEventListener("click", exportCsv);
 
 function exportCsv() {
   const students = studentsWithInfo();
-  const tpNames = data.tps.map(t => t.name);
+  const tpNames = currentCourse().tps.map(t => t.name);
   const header = ["Alumno", "Grupo", "Faltas", "Estado", ...tpNames];
   const rows = students.map(s => [
     s.name,
@@ -277,8 +317,8 @@ document.getElementById("btn-add-student").addEventListener("click", debounceCli
   const input = document.getElementById("new-student-name");
   const name = input.value.trim();
   if (!name) { showToast("Escribi el nombre del alumno", "error"); return; }
-  if (nameTaken(data.students, name)) { showToast("Ya existe un alumno cargado con ese nombre.", "error"); return; }
-  data.students.push({ id: newId(), name, groupId: null, notes: "" });
+  if (nameTaken(currentCourse().students, name)) { showToast("Ya existe un alumno cargado con ese nombre.", "error"); return; }
+  currentCourse().students.push({ id: newId(), name, groupId: null, notes: "" });
   saveData();
   input.value = "";
   renderStudentsTable();
@@ -298,12 +338,12 @@ document.getElementById("btn-bulk-add").addEventListener("click", debounceClick(
   const lines = textarea.value.split("\n").map(cleanBulkLine).filter(l => l.length > 0);
   if (!lines.length) { showToast("Pega al menos un nombre, uno por linea", "error"); return; }
 
-  const existing = new Set(data.students.map(s => s.name.toLowerCase()));
+  const existing = new Set(currentCourse().students.map(s => s.name.toLowerCase()));
   let added = 0;
   let skipped = 0;
   lines.forEach(name => {
     if (existing.has(name.toLowerCase())) { skipped++; return; }
-    data.students.push({ id: newId(), name, groupId: null, notes: "" });
+    currentCourse().students.push({ id: newId(), name, groupId: null, notes: "" });
     existing.add(name.toLowerCase());
     added++;
   });
@@ -316,9 +356,9 @@ document.getElementById("btn-bulk-add").addEventListener("click", debounceClick(
 async function deleteStudent(id) {
   const ok = await showConfirm("Eliminar este alumno y todo su historial?");
   if (!ok) return;
-  data.students = data.students.filter(s => s.id !== id);
-  Object.values(data.attendance).forEach(day => { delete day[id]; });
-  Object.values(data.submissions).forEach(sub => { delete sub[id]; });
+  currentCourse().students = currentCourse().students.filter(s => s.id !== id);
+  Object.values(currentCourse().attendance).forEach(day => { delete day[id]; });
+  Object.values(currentCourse().submissions).forEach(sub => { delete sub[id]; });
   saveData();
   renderStudentsTable();
 }
@@ -360,13 +400,13 @@ function formatDateShort(dateStr) {
 
 function renderAttendanceHistory() {
   const query = (document.getElementById("search-historial").value || "").toLowerCase();
-  const dates = Object.keys(data.attendance).sort();
+  const dates = Object.keys(currentCourse().attendance).sort();
   const container = document.getElementById("table-historial");
 
-  if (!data.students.length) { container.innerHTML = emptyState("Todavia no hay alumnos cargados."); return; }
+  if (!currentCourse().students.length) { container.innerHTML = emptyState("Todavia no hay alumnos cargados."); return; }
   if (!dates.length) { container.innerHTML = emptyState("Todavia no tomaste asistencia ningun dia."); return; }
 
-  const students = data.students
+  const students = currentCourse().students
     .filter(s => s.name.toLowerCase().includes(query))
     .slice()
     .sort((a, b) => a.name.localeCompare(b.name, "es"));
@@ -376,7 +416,10 @@ function renderAttendanceHistory() {
   let html = '<div class="history-table-wrap"><table class="history-table"><thead><tr>';
   html += '<th class="sticky-col">Alumno</th>';
   dates.forEach(date => {
-    html += `<th class="date-col text-center" onclick="goToDate('${date}')" title="Abrir asistencia del ${date}">${formatDateShort(date)}</th>`;
+    html += `<th class="date-col text-center" title="Toca la fecha para editar ese dia">
+      <span onclick="goToDate('${date}')">${formatDateShort(date)}</span>
+      <button class="hist-date-del" title="Eliminar la asistencia de este dia" onclick="event.stopPropagation(); deleteAttendanceDate('${date}')">${ICON_TRASH}</button>
+    </th>`;
   });
   html += '<th class="text-center">Faltas</th></tr></thead><tbody>';
 
@@ -384,7 +427,7 @@ function renderAttendanceHistory() {
     html += `<tr><td class="sticky-col"><div class="name-cell" onclick="openProfile(${s.id})"><div class="avatar al_dia">${initials(s.name)}</div>${s.name}</div></td>`;
     let faltas = 0;
     dates.forEach(date => {
-      const dayRecord = data.attendance[date];
+      const dayRecord = currentCourse().attendance[date];
       const hasRecord = Object.prototype.hasOwnProperty.call(dayRecord, s.id);
       let mark;
       if (!hasRecord) {
@@ -406,13 +449,22 @@ function renderAttendanceHistory() {
 
 document.getElementById("search-historial").addEventListener("input", renderAttendanceHistory);
 
+async function deleteAttendanceDate(date) {
+  const ok = await showConfirm(`Eliminar toda la asistencia del ${formatDateShort(date)}? Esto no se puede deshacer.`);
+  if (!ok) return;
+  delete currentCourse().attendance[date];
+  saveData();
+  renderAttendanceHistory();
+  showToast("Se elimino la asistencia de ese dia", "success");
+}
+
 function renderAttendanceList() {
   const date = document.getElementById("attendance-date").value;
-  const dayRecord = data.attendance[date] || {};
+  const dayRecord = currentCourse().attendance[date] || {};
   const list = document.getElementById("attendance-list");
-  if (!data.students.length) { list.innerHTML = emptyState("Todavia no hay alumnos cargados."); return; }
+  if (!currentCourse().students.length) { list.innerHTML = emptyState("Todavia no hay alumnos cargados."); return; }
 
-  list.innerHTML = data.students
+  list.innerHTML = currentCourse().students
     .slice()
     .sort((a, b) => a.name.localeCompare(b.name, "es"))
     .map(s => {
@@ -442,11 +494,11 @@ document.getElementById("btn-save-attendance").addEventListener("click", debounc
   if (!date) { showToast("Elegi una fecha", "error"); return; }
   const rows = document.querySelectorAll(".attendance-row");
   if (!rows.length) { showToast("Todavia no hay alumnos cargados.", "error"); return; }
-  if (!data.attendance[date]) data.attendance[date] = {};
+  if (!currentCourse().attendance[date]) currentCourse().attendance[date] = {};
   rows.forEach(row => {
     const id = Number(row.dataset.id);
     const present = row.querySelector(".present").classList.contains("active");
-    data.attendance[date][id] = pendingAttendance[id] !== undefined ? pendingAttendance[id] : present;
+    currentCourse().attendance[date][id] = pendingAttendance[id] !== undefined ? pendingAttendance[id] : present;
   });
   saveData();
   showToast("Asistencia guardada", "success");
@@ -456,12 +508,12 @@ document.getElementById("btn-save-attendance").addEventListener("click", debounc
 
 function renderTpList() {
   const container = document.getElementById("tp-list");
-  if (!data.tps.length) { container.innerHTML = emptyState("Todavia no cargaste ningun TP."); return; }
+  if (!currentCourse().tps.length) { container.innerHTML = emptyState("Todavia no cargaste ningun TP."); return; }
 
-  const individuals = data.students.filter(s => !s.groupId).sort((a, b) => a.name.localeCompare(b.name, "es"));
-  const groups = data.groups.slice().sort((a, b) => a.name.localeCompare(b.name, "es"));
+  const individuals = currentCourse().students.filter(s => !s.groupId).sort((a, b) => a.name.localeCompare(b.name, "es"));
+  const groups = currentCourse().groups.slice().sort((a, b) => a.name.localeCompare(b.name, "es"));
 
-  container.innerHTML = data.tps.map(tp => `
+  container.innerHTML = currentCourse().tps.map(tp => `
     <div class="tp-block">
       <div class="tp-block-head">
         <p class="tp-block-title">${tp.name}</p>
@@ -472,9 +524,9 @@ function renderTpList() {
       </div>
       <div class="tp-members">
         ${groups.map(g => {
-          const members = data.students.filter(s => s.groupId === g.id);
+          const members = currentCourse().students.filter(s => s.groupId === g.id);
           if (!members.length) return "";
-          const submitted = members.length && members.every(m => !!(data.submissions[tp.id] && data.submissions[tp.id][m.id]));
+          const submitted = members.length && members.every(m => !!(currentCourse().submissions[tp.id] && currentCourse().submissions[tp.id][m.id]));
           const repId = members[0].id;
           return `<div class="tp-row group-row ${submitted ? "submitted" : ""}" onclick="toggleTpSubmission(${tp.id}, ${repId})">
             <div class="tp-row-info">
@@ -488,7 +540,7 @@ function renderTpList() {
           </div>`;
         }).join("")}
         ${individuals.map(s => {
-          const submitted = !!(data.submissions[tp.id] && data.submissions[tp.id][s.id]);
+          const submitted = !!(currentCourse().submissions[tp.id] && currentCourse().submissions[tp.id][s.id]);
           return `<div class="tp-row ${submitted ? "submitted" : ""}" onclick="toggleTpSubmission(${tp.id}, ${s.id})">
             <div class="tp-row-info">
               <div class="avatar al_dia">${initials(s.name)}</div>
@@ -497,23 +549,23 @@ function renderTpList() {
             <div class="tp-status"><span class="tp-status-dot"></span>${submitted ? "Entregado" : "Pendiente"}</div>
           </div>`;
         }).join("")}
-        ${(!groups.some(g => data.students.some(s => s.groupId === g.id)) && !individuals.length) ? emptyState("Todavia no hay alumnos cargados.") : ""}
+        ${(!groups.some(g => currentCourse().students.some(s => s.groupId === g.id)) && !individuals.length) ? emptyState("Todavia no hay alumnos cargados.") : ""}
       </div>
     </div>
   `).join("");
 }
 
 function toggleTpSubmission(tpId, studentId) {
-  if (!data.submissions[tpId]) data.submissions[tpId] = {};
-  const current = !!data.submissions[tpId][studentId];
+  if (!currentCourse().submissions[tpId]) currentCourse().submissions[tpId] = {};
+  const current = !!currentCourse().submissions[tpId][studentId];
   const newValue = !current;
 
-  const student = data.students.find(s => s.id === studentId);
+  const student = currentCourse().students.find(s => s.id === studentId);
   let ids = [studentId];
   if (student.groupId) {
-    ids = data.students.filter(s => s.groupId === student.groupId).map(s => s.id);
+    ids = currentCourse().students.filter(s => s.groupId === student.groupId).map(s => s.id);
   }
-  ids.forEach(id => { data.submissions[tpId][id] = newValue; });
+  ids.forEach(id => { currentCourse().submissions[tpId][id] = newValue; });
   saveData();
   renderTpList();
 }
@@ -521,8 +573,8 @@ function toggleTpSubmission(tpId, studentId) {
 async function deleteTp(id) {
   const ok = await showConfirm("Eliminar este TP?");
   if (!ok) return;
-  data.tps = data.tps.filter(t => t.id !== id);
-  delete data.submissions[id];
+  currentCourse().tps = currentCourse().tps.filter(t => t.id !== id);
+  delete currentCourse().submissions[id];
   saveData();
   renderTpList();
 }
@@ -531,8 +583,8 @@ document.getElementById("btn-add-tp").addEventListener("click", debounceClick(()
   const input = document.getElementById("new-tp-name");
   const name = input.value.trim();
   if (!name) { showToast("Escribi el nombre del TP", "error"); return; }
-  if (nameTaken(data.tps, name)) { showToast("Ya existe un TP cargado con ese nombre.", "error"); return; }
-  data.tps.push({ id: newId(), name, date: todayStr() });
+  if (nameTaken(currentCourse().tps, name)) { showToast("Ya existe un TP cargado con ese nombre.", "error"); return; }
+  currentCourse().tps.push({ id: newId(), name, date: todayStr() });
   saveData();
   input.value = "";
   renderTpList();
@@ -545,8 +597,8 @@ document.getElementById("new-tp-name").addEventListener("keydown", e => {
 // ---------- Grupos ----------
 
 function renderGroupPicker() {
-  const grouped = new Set(data.students.filter(s => s.groupId).map(s => s.id));
-  const available = data.students.filter(s => !grouped.has(s.id));
+  const grouped = new Set(currentCourse().students.filter(s => s.groupId).map(s => s.id));
+  const available = currentCourse().students.filter(s => !grouped.has(s.id));
   const picker = document.getElementById("group-picker");
   if (!available.length) { picker.innerHTML = emptyState("Todos los alumnos ya estan en un grupo, o todavia no cargaste alumnos."); return; }
   picker.innerHTML = available.map(s => `
@@ -560,7 +612,7 @@ function togglePick(id) {
   if (selectedPick.includes(id)) {
     selectedPick = selectedPick.filter(x => x !== id);
   } else {
-    if (selectedPick.length >= data.maxGroupSize) { showToast(`Un grupo puede tener hasta ${data.maxGroupSize} integrante${data.maxGroupSize === 1 ? "" : "s"}`, "error"); return; }
+    if (selectedPick.length >= currentCourse().maxGroupSize) { showToast(`Un grupo puede tener hasta ${currentCourse().maxGroupSize} integrante${currentCourse().maxGroupSize === 1 ? "" : "s"}`, "error"); return; }
     selectedPick.push(id);
   }
   renderGroupPicker();
@@ -568,9 +620,9 @@ function togglePick(id) {
 
 function renderGroupList() {
   const list = document.getElementById("group-list");
-  if (!data.groups.length) { list.innerHTML = emptyState("Todavia no armaste grupos."); return; }
-  list.innerHTML = data.groups.map(g => {
-    const members = data.students.filter(s => s.groupId === g.id);
+  if (!currentCourse().groups.length) { list.innerHTML = emptyState("Todavia no armaste grupos."); return; }
+  list.innerHTML = currentCourse().groups.map(g => {
+    const members = currentCourse().students.filter(s => s.groupId === g.id);
     return `
     <div class="group-card">
       <div class="group-card-head">
@@ -589,12 +641,12 @@ document.getElementById("btn-add-group").addEventListener("click", debounceClick
   const input = document.getElementById("new-group-name");
   const name = input.value.trim();
   if (!name) { showToast("Escribi el nombre del grupo", "error"); return; }
-  if (nameTaken(data.groups, name)) { showToast("Ya existe un grupo con ese nombre.", "error"); return; }
+  if (nameTaken(currentCourse().groups, name)) { showToast("Ya existe un grupo con ese nombre.", "error"); return; }
   if (!selectedPick.length) { showToast("Elegi al menos un integrante", "error"); return; }
   const groupId = newId();
-  data.groups.push({ id: groupId, name });
+  currentCourse().groups.push({ id: groupId, name });
   selectedPick.forEach(sid => {
-    const student = data.students.find(s => s.id === sid);
+    const student = currentCourse().students.find(s => s.id === sid);
     if (student) student.groupId = groupId;
   });
   saveData();
@@ -607,8 +659,8 @@ document.getElementById("btn-add-group").addEventListener("click", debounceClick
 async function deleteGroup(id) {
   const ok = await showConfirm("Eliminar este grupo? Los alumnos quedan como individuales.");
   if (!ok) return;
-  data.students.forEach(s => { if (s.groupId === id) s.groupId = null; });
-  data.groups = data.groups.filter(g => g.id !== id);
+  currentCourse().students.forEach(s => { if (s.groupId === id) s.groupId = null; });
+  currentCourse().groups = currentCourse().groups.filter(g => g.id !== id);
   saveData();
   renderGroupPicker();
   renderGroupList();
@@ -654,7 +706,7 @@ function closeModal() { document.getElementById("modal-overlay").classList.add("
 
 function saveNotes(id) {
   const notes = document.getElementById("notes-field").value;
-  const student = data.students.find(s => s.id === id);
+  const student = currentCourse().students.find(s => s.id === id);
   if (student) student.notes = notes;
   saveData();
   closeModal();
@@ -666,6 +718,124 @@ document.getElementById("modal-overlay").addEventListener("click", e => {
   if (e.target.id === "modal-overlay") closeModal();
 });
 
+// ---------- Cursos ----------
+
+function renderCourseSelect() {
+  const select = document.getElementById("course-select");
+  select.innerHTML = data.courses.map(c =>
+    `<option value="${c.id}" ${c.id === data.currentCourseId ? "selected" : ""}>${c.name}</option>`
+  ).join("");
+}
+
+document.getElementById("course-select").addEventListener("change", e => {
+  data.currentCourseId = Number(e.target.value);
+  saveData();
+  selectedPick = [];
+  switchView(view);
+});
+
+document.getElementById("btn-manage-courses").addEventListener("click", openCourseManager);
+
+function openCourseManager() {
+  renderCourseManagerContent();
+  document.getElementById("modal-overlay").classList.remove("hidden");
+}
+
+function renderCourseManagerContent() {
+  document.getElementById("modal-content").innerHTML = `
+    <button class="modal-close" onclick="closeModal()">Cerrar</button>
+    <p style="font-family: var(--font-display); font-weight:700; font-size:16px; margin:0 0 16px;">Mis cursos</p>
+
+    <div id="course-manager-list" style="display:flex; flex-direction:column; gap:8px; margin-bottom:18px;"></div>
+
+    <p style="font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-secondary); margin: 0 0 9px;">Agregar curso nuevo</p>
+    <div style="display:flex; gap:8px;">
+      <input type="text" id="new-course-name" placeholder="Ej: 4to año - Turno tarde" class="input-inline" style="flex:1;">
+      <button class="btn btn-accent" id="btn-add-course">Crear</button>
+    </div>
+  `;
+  renderCourseManagerList();
+  document.getElementById("btn-add-course").addEventListener("click", debounceClick(addCourse));
+  document.getElementById("new-course-name").addEventListener("keydown", e => {
+    if (e.key === "Enter") document.getElementById("btn-add-course").click();
+  });
+}
+
+function renderCourseManagerList() {
+  const list = document.getElementById("course-manager-list");
+  list.innerHTML = data.courses.map(c => `
+    <div style="display:flex; align-items:center; gap:8px; border:1px solid var(--line); border-radius:10px; padding:10px 12px;">
+      <input type="text" value="${c.name}" data-course-id="${c.id}" class="input-inline course-rename-input" style="flex:1;">
+      ${c.id === data.currentCourseId ? '<span class="status-pill al_dia">Actual</span>' : `<button class="btn" onclick="switchToCourse(${c.id})">Usar</button>`}
+      <button class="link-btn" onclick="deleteCourse(${c.id})">${ICON_TRASH}</button>
+    </div>
+  `).join("");
+
+  list.querySelectorAll(".course-rename-input").forEach(input => {
+    input.addEventListener("change", () => renameCourse(Number(input.dataset.courseId), input.value));
+  });
+}
+
+function switchToCourse(id) {
+  data.currentCourseId = id;
+  saveData();
+  selectedPick = [];
+  renderCourseSelect();
+  renderCourseManagerList();
+  switchView(view);
+}
+
+async function renameCourse(id, newName) {
+  const name = newName.trim();
+  if (!name) { showToast("El nombre del curso no puede quedar vacio", "error"); renderCourseManagerList(); return; }
+  if (data.courses.some(c => c.id !== id && c.name.trim().toLowerCase() === name.toLowerCase())) {
+    showToast("Ya existe un curso con ese nombre", "error");
+    renderCourseManagerList();
+    return;
+  }
+  const course = data.courses.find(c => c.id === id);
+  course.name = name;
+  saveData();
+  renderCourseSelect();
+}
+
+const addCourse = () => {
+  const input = document.getElementById("new-course-name");
+  const name = input.value.trim();
+  if (!name) { showToast("Escribi el nombre del curso", "error"); return; }
+  if (nameTaken(data.courses, name)) { showToast("Ya existe un curso con ese nombre", "error"); return; }
+  const id = newId();
+  data.courses.push({ id, name });
+  data.courseData[id] = emptyCourseData();
+  saveData();
+  input.value = "";
+  renderCourseSelect();
+  renderCourseManagerList();
+  showToast(`Curso "${name}" creado`, "success");
+};
+
+async function deleteCourse(id) {
+  if (data.courses.length <= 1) {
+    showToast("Tiene que quedar al menos un curso.", "error");
+    return;
+  }
+  const course = data.courses.find(c => c.id === id);
+  const ok = await showConfirm(`Eliminar el curso "${course.name}"? Se borran todos sus alumnos, asistencias, grupos y TPs. Esto no se puede deshacer.`);
+  if (!ok) return;
+
+  data.courses = data.courses.filter(c => c.id !== id);
+  delete data.courseData[id];
+  if (data.currentCourseId === id) {
+    data.currentCourseId = data.courses[0].id;
+  }
+  saveData();
+  renderCourseSelect();
+  renderCourseManagerList();
+  switchView(view);
+  showToast("Curso eliminado", "success");
+}
+
 // ---------- Init ----------
 
+renderCourseSelect();
 renderPanel();

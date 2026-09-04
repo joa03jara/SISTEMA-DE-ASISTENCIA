@@ -95,6 +95,19 @@
   .brand-title { font-family: var(--font-display); font-weight: 700; font-size: 16px; margin: 0; line-height: 1.2; color: #fff; }
   .brand-sub { font-size: 11.5px; color: var(--sidebar-text); margin: 2px 0 0; letter-spacing: 0.02em; }
 
+  .course-switcher { display: flex; gap: 6px; margin-bottom: 18px; align-items: center; }
+  .course-switcher select {
+    flex: 1; min-width: 0; font-size: 12.5px; font-family: var(--font-body); font-weight: 600;
+    background: rgba(255,255,255,0.08); color: #fff; border: 1px solid rgba(255,255,255,0.16);
+    border-radius: 8px; padding: 8px 8px; cursor: pointer;
+  }
+  .course-switcher select option { color: #1c2333; }
+  .course-switcher button {
+    background: rgba(255,255,255,0.08); color: var(--sidebar-text); border: 1px solid rgba(255,255,255,0.16);
+    border-radius: 8px; width: 34px; height: 34px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; cursor: pointer;
+  }
+  .course-switcher button:hover { color: #fff; background: rgba(255,255,255,0.14); }
+
   .nav { display: flex; flex-direction: column; gap: 3px; }
 
   .nav-item {
@@ -254,8 +267,14 @@
     border-right: 1px solid var(--line-strong);
   }
   table.history-table thead th.sticky-col { background: var(--paper); z-index: 6; }
-  table.history-table th.date-col { cursor: pointer; }
+  table.history-table th.date-col { cursor: pointer; position: relative; padding-right: 26px; }
   table.history-table th.date-col:hover { color: var(--accent); }
+  .hist-date-del {
+    position: absolute; top: 50%; right: 4px; transform: translateY(-50%);
+    background: none; border: none; color: var(--text-muted); cursor: pointer;
+    padding: 3px; display: flex; align-items: center; border-radius: 5px;
+  }
+  .hist-date-del:hover { color: var(--coral); background: var(--coral-light); }
   .hist-mark { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%; margin: 0 auto; }
   .hist-mark.present { background: var(--success-light); color: var(--success-dark); }
   .hist-mark.absent { background: var(--coral-light); color: var(--coral-dark); }
@@ -266,8 +285,8 @@
   .attendance-name { display: flex; align-items: center; gap: 11px; font-size: 14px; }
   .toggle-group { display: flex; gap: 7px; }
   .toggle-btn { font-size: 12.5px; font-weight: 600; padding: 7px 15px; border-radius: 8px; border: 1.5px solid var(--line-strong); background: var(--paper-raised); cursor: pointer; color: var(--text-secondary); display: inline-flex; align-items: center; gap: 6px; }
-  .toggle-btn.present { border-color: var(--accent); color: var(--accent); }
-  .toggle-btn.present.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .toggle-btn.present { border-color: var(--success); color: var(--success); }
+  .toggle-btn.present.active { background: var(--success); border-color: var(--success); color: #fff; }
   .toggle-btn.absent { border-color: var(--line-strong); color: var(--text-secondary); }
   .toggle-btn.absent.active { background: var(--coral); border-color: var(--coral); color: #fff; }
 
@@ -388,6 +407,8 @@
     }
     .brand { flex-direction: column; padding: 0 0 14px; gap: 4px; }
     .brand-title, .brand-sub { display: none; }
+    .course-switcher select { display: none; }
+    .course-switcher { justify-content: center; }
     .nav-item { flex-direction: column; gap: 4px; padding: 10px 4px; font-size: 8.5px; text-align: center; width: 100%; }
     .nav-icon { font-size: 19px; }
     .sidebar-footer { display: none; }
