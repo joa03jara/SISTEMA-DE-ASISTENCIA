@@ -481,6 +481,20 @@
     .sidebar { width: 60px; }
     .nav-item { font-size: 0; padding: 10px 2px; }
     .nav-icon { font-size: 18px; }
+    .course-current-btn { width: 30px; height: 30px; }
+    .course-switcher button#btn-manage-courses { width: 30px; height: 30px; }
+
+    .stat-grid { grid-template-columns: 1fr; gap: 10px; }
+    .stat-card { padding: 14px 16px; }
+    .stat-icon { width: 44px; height: 44px; }
+    .stat-icon svg { width: 22px; height: 22px; }
+    .stat-value { font-size: 24px; }
+
+    .topbar { flex-direction: column; align-items: flex-start; gap: 10px; }
+    .topbar .card-head-actions { width: 100%; }
+    .limit-badge { width: 100%; justify-content: center; }
+
+    .main-inner { padding: 14px 12px 40px; }
   }
 
   @media (max-width: 620px) {
