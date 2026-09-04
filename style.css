@@ -116,14 +116,23 @@
 
   .course-dropdown {
     position: absolute; top: calc(100% + 6px); left: 0; right: 0; z-index: 60;
-    background: var(--paper-raised); border: 1px solid var(--line); border-radius: 10px;
-    box-shadow: 0 10px 28px rgba(15,20,40,0.25); padding: 6px; max-height: 260px; overflow-y: auto;
+    background: var(--paper-raised); border: 1px solid var(--line); border-radius: 12px;
+    box-shadow: 0 10px 28px rgba(15,20,40,0.25); padding: 8px; max-height: 260px; overflow-y: auto;
+    scrollbar-color: var(--line-strong) transparent;
   }
+  .course-dropdown::-webkit-scrollbar { width: 8px; }
+  .course-dropdown::-webkit-scrollbar-track { background: transparent; }
+  .course-dropdown::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 10px; }
+  .course-dropdown::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
   .course-dropdown-item {
     display: flex; align-items: center; justify-content: space-between; gap: 8px;
-    padding: 9px 10px; border-radius: 7px; cursor: pointer; font-size: 13px; color: var(--text-primary);
+    padding: 11px 12px; border-radius: 8px; cursor: pointer; font-size: 13.5px; color: var(--text-primary);
+    border-bottom: 1px solid var(--line);
   }
-  .course-dropdown-item:hover { background: var(--accent-light); }
+  .course-dropdown-item:last-child { border-bottom: none; }
+  .course-dropdown-item + .course-dropdown-item { margin-top: 2px; }
+  .course-dropdown-item:hover { background: var(--accent-light); border-radius: 8px; }
   .course-dropdown-item.active { background: var(--accent-light); color: var(--accent-dark); font-weight: 600; }
   .course-dropdown-item svg { flex-shrink: 0; color: var(--accent); }
 
