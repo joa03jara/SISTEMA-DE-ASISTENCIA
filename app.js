@@ -723,7 +723,24 @@ function selectCourseFromDropdown(id) {
 }
 
 function toggleCourseDropdown() {
-  document.getElementById("course-dropdown").classList.toggle("hidden");
+  const dropdown = document.getElementById("course-dropdown");
+  const willOpen = dropdown.classList.contains("hidden");
+  if (willOpen) positionCourseDropdown();
+  dropdown.classList.toggle("hidden");
+}
+
+function positionCourseDropdown() {
+  const btn = document.getElementById("course-current-btn");
+  const dropdown = document.getElementById("course-dropdown");
+  const rect = btn.getBoundingClientRect();
+  const dropdownWidth = 236;
+  let left = rect.left;
+  if (left + dropdownWidth > window.innerWidth - 8) {
+    left = window.innerWidth - dropdownWidth - 8;
+  }
+  if (left < 8) left = 8;
+  dropdown.style.top = `${rect.bottom + 6}px`;
+  dropdown.style.left = `${left}px`;
 }
 
 function closeCourseDropdown() {
