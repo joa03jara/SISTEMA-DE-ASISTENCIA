@@ -270,29 +270,6 @@ document.getElementById("search-panel").addEventListener("input", e => {
   renderPanelTable(studentsWithInfo().filter(s => s.name.toLowerCase().includes(q)));
 });
 
-document.getElementById("btn-export").addEventListener("click", exportCsv);
-
-function exportCsv() {
-  const students = studentsWithInfo();
-  const tpNames = currentCourse().tps.map(t => t.name);
-  const header = ["Alumno", "Grupo", "Faltas", "Estado", ...tpNames];
-  const rows = students.map(s => [
-    s.name,
-    s.group_name || "Individual",
-    s.faltas,
-    statusLabel(s.status),
-    ...s.tps.map(t => (t.submitted ? "Si" : "No")),
-  ]);
-  const csv = [header, ...rows].map(r => r.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(",")).join("\r\n");
-  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `asistencia_${new Date().toISOString().slice(0, 10)}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
 // ---------- Alumnos ----------
 
 function renderStudentsTable() {
@@ -721,17 +698,48 @@ document.getElementById("modal-overlay").addEventListener("click", e => {
 // ---------- Cursos ----------
 
 function renderCourseSelect() {
-  const select = document.getElementById("course-select");
-  select.innerHTML = data.courses.map(c =>
-    `<option value="${c.id}" ${c.id === data.currentCourseId ? "selected" : ""}>${c.name}</option>`
-  ).join("");
+  const current = data.courses.find(c => c.id === data.currentCourseId);
+  document.getElementById("course-current-name").textContent = current ? current.name : "Curso";
+  renderCourseDropdownList();
 }
 
-document.getElementById("course-select").addEventListener("change", e => {
-  data.currentCourseId = Number(e.target.value);
+function renderCourseDropdownList() {
+  const dropdown = document.getElementById("course-dropdown");
+  dropdown.innerHTML = data.courses.map(c => `
+    <div class="course-dropdown-item ${c.id === data.currentCourseId ? "active" : ""}" onclick="selectCourseFromDropdown(${c.id})">
+      ${c.name}
+      ${c.id === data.currentCourseId ? ICON_CHECK : ""}
+    </div>
+  `).join("");
+}
+
+function selectCourseFromDropdown(id) {
+  data.currentCourseId = id;
   saveData();
   selectedPick = [];
+  renderCourseSelect();
+  closeCourseDropdown();
   switchView(view);
+}
+
+function toggleCourseDropdown() {
+  document.getElementById("course-dropdown").classList.toggle("hidden");
+}
+
+function closeCourseDropdown() {
+  document.getElementById("course-dropdown").classList.add("hidden");
+}
+
+document.getElementById("course-current-btn").addEventListener("click", (e) => {
+  e.stopPropagation();
+  toggleCourseDropdown();
+});
+
+document.addEventListener("click", (e) => {
+  const dropdown = document.getElementById("course-dropdown");
+  if (!dropdown.classList.contains("hidden") && !dropdown.contains(e.target) && e.target.id !== "course-current-btn") {
+    closeCourseDropdown();
+  }
 });
 
 document.getElementById("btn-manage-courses").addEventListener("click", openCourseManager);
@@ -744,9 +752,10 @@ function openCourseManager() {
 function renderCourseManagerContent() {
   document.getElementById("modal-content").innerHTML = `
     <button class="modal-close" onclick="closeModal()">Cerrar</button>
-    <p style="font-family: var(--font-display); font-weight:700; font-size:16px; margin:0 0 16px;">Mis cursos</p>
+    <p style="font-family: var(--font-display); font-weight:700; font-size:16px; margin:0 0 4px;">Mis cursos</p>
+    <p class="muted small" style="margin:0 0 16px;">Cada curso tiene sus propios alumnos, grupos, asistencia y TPs.</p>
 
-    <div id="course-manager-list" style="display:flex; flex-direction:column; gap:8px; margin-bottom:18px;"></div>
+    <div id="course-manager-list" style="display:flex; flex-direction:column; gap:9px; margin-bottom:20px;"></div>
 
     <p style="font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-secondary); margin: 0 0 9px;">Agregar curso nuevo</p>
     <div style="display:flex; gap:8px;">
@@ -761,19 +770,36 @@ function renderCourseManagerContent() {
   });
 }
 
+const ICON_PENCIL = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>';
+
 function renderCourseManagerList() {
   const list = document.getElementById("course-manager-list");
   list.innerHTML = data.courses.map(c => `
-    <div style="display:flex; align-items:center; gap:8px; border:1px solid var(--line); border-radius:10px; padding:10px 12px;">
-      <input type="text" value="${c.name}" data-course-id="${c.id}" class="input-inline course-rename-input" style="flex:1;">
-      ${c.id === data.currentCourseId ? '<span class="status-pill al_dia">Actual</span>' : `<button class="btn" onclick="switchToCourse(${c.id})">Usar</button>`}
-      <button class="link-btn" onclick="deleteCourse(${c.id})">${ICON_TRASH}</button>
+    <div class="course-card">
+      <div class="course-card-name-wrap">
+        <p class="course-card-name" id="course-name-display-${c.id}">${c.name}</p>
+        <input type="text" class="input-inline course-rename-input hidden" id="course-name-input-${c.id}" value="${c.name}" data-course-id="${c.id}">
+      </div>
+      <div class="course-card-actions">
+        <button class="icon-btn" title="Renombrar curso" onclick="startRenameCourse(${c.id})">${ICON_PENCIL}</button>
+        ${c.id === data.currentCourseId ? '<span class="status-pill al_dia">Actual</span>' : `<button class="btn" onclick="switchToCourse(${c.id})">Usar</button>`}
+        <button class="link-btn" onclick="deleteCourse(${c.id})">${ICON_TRASH}</button>
+      </div>
     </div>
   `).join("");
 
   list.querySelectorAll(".course-rename-input").forEach(input => {
-    input.addEventListener("change", () => renameCourse(Number(input.dataset.courseId), input.value));
+    input.addEventListener("keydown", e => { if (e.key === "Enter") input.blur(); });
+    input.addEventListener("blur", () => renameCourse(Number(input.dataset.courseId), input.value));
   });
+}
+
+function startRenameCourse(id) {
+  document.getElementById(`course-name-display-${id}`).classList.add("hidden");
+  const input = document.getElementById(`course-name-input-${id}`);
+  input.classList.remove("hidden");
+  input.focus();
+  input.select();
 }
 
 function switchToCourse(id) {
@@ -797,6 +823,7 @@ async function renameCourse(id, newName) {
   course.name = name;
   saveData();
   renderCourseSelect();
+  renderCourseManagerList();
 }
 
 const addCourse = () => {

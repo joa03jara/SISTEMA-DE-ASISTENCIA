@@ -27,8 +27,13 @@
     </div>
 
     <div class="course-switcher">
-      <select id="course-select" title="Curso actual"></select>
+      <button id="course-current-btn" class="course-current-btn" title="Cambiar de curso">
+        <svg class="course-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6.5a2 2 0 0 1 2-2h6l2 2h6a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-11z"/></svg>
+        <span id="course-current-name">Curso</span>
+        <svg class="course-chevron" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
       <button id="btn-manage-courses" title="Administrar cursos"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 13a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.9 2.9l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V19a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.9-2.9l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.6-1H4a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1.1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.9-2.9l.1.1a1.7 1.7 0 0 0 1.9.3H10a1.7 1.7 0 0 0 1-1.6V4a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.9 2.9l-.1.1a1.7 1.7 0 0 0-.3 1.9V10a1.7 1.7 0 0 0 1.6 1H20a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.6 1z"/></svg></button>
+      <div id="course-dropdown" class="course-dropdown hidden"></div>
     </div>
 
     <nav class="nav">
@@ -40,10 +45,7 @@
     </nav>
 
     <div class="sidebar-footer">
-      <p class="sidebar-footer-label">Limite de faltas</p>
-      <p class="sidebar-footer-value">5 faltas</p>
-      <div class="sidebar-footer-bar"><div class="sidebar-footer-bar-fill" style="width:100%"></div></div>
-      <p class="save-note">Los datos se guardan solos en esta computadora. Usa "Exportar CSV" para tener una copia de respaldo.</p>
+      <p class="save-note">Los datos se guardan solos en esta computadora.</p>
     </div>
   </aside>
 
@@ -56,7 +58,6 @@
       </div>
       <div class="card-head-actions">
         <span class="limit-badge" title="Limite de faltas del curso"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg> Limite: 5 faltas</span>
-        <button class="btn" id="btn-export"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5v11"/><path d="M7.5 10.5L12 15l4.5-4.5"/><path d="M4.5 17.5v2a1.5 1.5 0 0 0 1.5 1.5h12a1.5 1.5 0 0 0 1.5-1.5v-2"/></svg> Exportar CSV</button>
       </div>
     </header>
 
