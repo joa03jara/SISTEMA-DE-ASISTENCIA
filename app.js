@@ -868,6 +868,7 @@ document.addEventListener("click", (e) => {
 document.getElementById("btn-manage-courses").addEventListener("click", openCourseManager);
 
 function openCourseManager() {
+  closeMobileMenu();
   renderCourseManagerContent();
   document.getElementById("modal-overlay").classList.remove("hidden");
 }
