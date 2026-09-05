@@ -1,60 +1,72 @@
-const STORAGE_KEY = "registro_curso_v1";
+const STORAGE_KEY = "registro_curso_v1"; // se usa solo para migrar datos viejos una vez
 const LIMITE_FALTAS = 5;
+
+const firebaseConfig = {
+  apiKey: "AIzaSyD5epR2sf2Zw78330fCPOgDGTzeHi5KJVI",
+  authDomain: "registro-de-curso.firebaseapp.com",
+  projectId: "registro-de-curso",
+  storageBucket: "registro-de-curso.firebasestorage.app",
+  messagingSenderId: "539537852895",
+  appId: "1:539537852895:web:b75bc84abf04ff7c719c6a",
+};
+
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+
+// Permite que seguir funcionando sin señal (guarda una copia local para consultar/editar offline)
+db.enablePersistence({ synchronizeTabs: true }).catch(() => { /* ya estaba habilitado o el navegador no lo soporta */ });
 
 function emptyCourseData() {
   return { students: [], groups: [], attendance: {}, tps: [], submissions: {}, maxGroupSize: 4 };
 }
 
-function loadData() {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  let parsed = null;
-  if (raw) {
-    try { parsed = JSON.parse(raw); } catch (e) { parsed = null; }
-  }
-
-  if (!parsed) {
-    const firstCourseId = 1;
-    return {
-      version: 2,
-      nextId: 2,
-      currentCourseId: firstCourseId,
-      courses: [{ id: firstCourseId, name: "Mi curso" }],
-      courseData: { [firstCourseId]: emptyCourseData() },
-    };
-  }
-
-  // Migracion automatica: formato viejo (un solo curso, sin "version") -> formato con cursos
-  if (parsed.version !== 2) {
-    const firstCourseId = parsed.nextId ? parsed.nextId + 1 : 1;
-    const migrated = {
-      version: 2,
-      nextId: firstCourseId + 1,
-      currentCourseId: firstCourseId,
-      courses: [{ id: firstCourseId, name: "Mi curso" }],
-      courseData: {
-        [firstCourseId]: {
-          students: parsed.students || [],
-          groups: parsed.groups || [],
-          attendance: parsed.attendance || {},
-          tps: parsed.tps || [],
-          submissions: parsed.submissions || {},
-          maxGroupSize: parsed.maxGroupSize || 4,
-        },
-      },
-    };
-    return migrated;
-  }
-
-  return parsed;
+function defaultData() {
+  const firstCourseId = 1;
+  return {
+    version: 2,
+    nextId: 2,
+    currentCourseId: firstCourseId,
+    courses: [{ id: firstCourseId, name: "Mi curso" }],
+    courseData: { [firstCourseId]: emptyCourseData() },
+  };
 }
 
-function saveData() { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }
+// Migracion: si en este dispositivo habia datos guardados de la version vieja (antes de Firebase),
+// los convertimos al formato con cursos para no perderlos.
+function migrateLegacyLocalData() {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (!raw) return null;
+  let parsed;
+  try { parsed = JSON.parse(raw); } catch (e) { return null; }
+  if (!parsed) return null;
 
-let data = loadData();
+  if (parsed.version === 2) return parsed;
+
+  const firstCourseId = parsed.nextId ? parsed.nextId + 1 : 1;
+  return {
+    version: 2,
+    nextId: firstCourseId + 1,
+    currentCourseId: firstCourseId,
+    courses: [{ id: firstCourseId, name: "Mi curso" }],
+    courseData: {
+      [firstCourseId]: {
+        students: parsed.students || [],
+        groups: parsed.groups || [],
+        attendance: parsed.attendance || {},
+        tps: parsed.tps || [],
+        submissions: parsed.submissions || {},
+        maxGroupSize: parsed.maxGroupSize || 4,
+      },
+    },
+  };
+}
+
+let data = null;
+let currentUser = null;
 let view = "panel";
 let selectedPick = [];
 window.getSelectedPick = () => selectedPick; // util interno, no afecta la app
-window.data = data;
 
 function currentCourse() {
   return data.courseData[data.currentCourseId];
@@ -62,6 +74,88 @@ function currentCourse() {
 window.currentCourse = currentCourse;
 
 function newId() { return data.nextId++; }
+
+function docRef(uid) {
+  return db.collection("users").doc(uid).collection("appData").doc("main");
+}
+
+async function saveData() {
+  window.data = data;
+  if (!currentUser) return;
+  try {
+    await docRef(currentUser.uid).set(data);
+  } catch (e) {
+    showToast("No se pudo guardar (revisa la conexion). Se reintentara solo.", "error");
+  }
+}
+
+async function loadDataForUser(user) {
+  currentUser = user;
+  const ref = docRef(user.uid);
+  try {
+    const snap = await ref.get();
+    if (snap.exists) {
+      data = snap.data();
+    } else {
+      // Primera vez que este usuario entra: intenta traer datos viejos de este dispositivo, si habia
+      data = migrateLegacyLocalData() || defaultData();
+      await ref.set(data);
+    }
+  } catch (e) {
+    // Sin conexion la primera vez que se abre en un dispositivo nuevo: no hay nada que mostrar todavia
+    data = migrateLegacyLocalData() || defaultData();
+  }
+  window.data = data;
+  document.getElementById("user-email-note").textContent = user.email;
+  showApp();
+}
+
+function showApp() {
+  document.getElementById("loading-screen").classList.add("hidden");
+  document.getElementById("login-screen").classList.add("hidden");
+  document.getElementById("app-root").classList.remove("hidden");
+  renderCourseSelect();
+  renderPanel();
+}
+
+function showLogin() {
+  document.getElementById("loading-screen").classList.add("hidden");
+  document.getElementById("app-root").classList.add("hidden");
+  document.getElementById("login-screen").classList.remove("hidden");
+}
+
+document.getElementById("btn-login").addEventListener("click", debounceClick(async () => {
+  const email = document.getElementById("login-email").value.trim();
+  const password = document.getElementById("login-password").value;
+  const errorEl = document.getElementById("login-error");
+  errorEl.textContent = "";
+  if (!email || !password) { errorEl.textContent = "Completa el email y la contrasena."; return; }
+  try {
+    await auth.signInWithEmailAndPassword(email, password);
+  } catch (e) {
+    errorEl.textContent = "Email o contrasena incorrectos.";
+  }
+}));
+
+document.getElementById("login-password").addEventListener("keydown", e => {
+  if (e.key === "Enter") document.getElementById("btn-login").click();
+});
+
+document.getElementById("btn-logout").addEventListener("click", async () => {
+  const ok = await showConfirm("Cerrar sesion?");
+  if (!ok) return;
+  await auth.signOut();
+});
+
+auth.onAuthStateChanged(user => {
+  if (user) {
+    loadDataForUser(user);
+  } else {
+    currentUser = null;
+    data = null;
+    showLogin();
+  }
+});
 
 function initials(name) {
   return name.trim().split(/\s+/).slice(0, 2).map(w => w[0].toUpperCase()).join("");
@@ -880,6 +974,5 @@ async function deleteCourse(id) {
 }
 
 // ---------- Init ----------
-
-renderCourseSelect();
-renderPanel();
+// El arranque real pasa por auth.onAuthStateChanged (ver arriba):
+// muestra el login o carga los datos y recien ahi pinta el panel.

@@ -15,7 +15,24 @@
 </head>
 <body>
 
-<div class="app">
+<div id="loading-screen" class="fullscreen-msg">
+  <div class="loading-spinner"></div>
+  <p>Cargando tus datos...</p>
+</div>
+
+<div id="login-screen" class="fullscreen-msg hidden">
+  <div class="login-card">
+    <div class="brand-icon" style="width:46px; height:46px; margin: 0 auto 16px;"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4.5L3 8.5l9 4 9-4-9-4z"/><path d="M6.5 10.3v5.2c0 1.3 2.5 3 5.5 3s5.5-1.7 5.5-3v-5.2"/></svg></div>
+    <p class="login-title">Registro de curso</p>
+    <p class="muted" style="text-align:center; margin: 0 0 22px;">Inicia sesion para ver tus datos</p>
+    <input type="email" id="login-email" class="input-inline" placeholder="Tu email" style="width:100%; margin-bottom:10px;" autocomplete="username">
+    <input type="password" id="login-password" class="input-inline" placeholder="Contrasena" style="width:100%; margin-bottom:16px;" autocomplete="current-password">
+    <button class="btn btn-accent" id="btn-login" style="width:100%; justify-content:center;">Iniciar sesion</button>
+    <p id="login-error" class="muted small" style="color:var(--coral); text-align:center; margin-top:12px; min-height:16px;"></p>
+  </div>
+</div>
+
+<div class="app hidden" id="app-root">
 
   <aside class="sidebar">
     <div class="brand">
@@ -45,7 +62,8 @@
     </nav>
 
     <div class="sidebar-footer">
-      <p class="save-note">Los datos se guardan solos en esta computadora.</p>
+      <p class="save-note" id="user-email-note">Tus datos se guardan en la nube.</p>
+      <button id="btn-logout" class="logout-btn">Cerrar sesion</button>
     </div>
   </aside>
 
@@ -185,6 +203,9 @@
 
 <div id="toast-container" class="toast-container"></div>
 
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="app.js"></script>
 <script>
   if ("serviceWorker" in navigator) {
