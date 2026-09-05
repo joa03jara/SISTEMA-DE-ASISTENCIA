@@ -276,8 +276,20 @@ function showConfirm(message, okLabel = "Eliminar") {
 // ---------- Navigation ----------
 
 document.querySelectorAll(".nav-item").forEach(btn => {
-  btn.addEventListener("click", () => switchView(btn.dataset.view));
+  btn.addEventListener("click", () => {
+    switchView(btn.dataset.view);
+    closeMobileMenu();
+  });
 });
+
+function openMobileMenu() {
+  document.getElementById("app-root").classList.add("menu-open");
+}
+function closeMobileMenu() {
+  document.getElementById("app-root").classList.remove("menu-open");
+}
+document.getElementById("hamburger-btn").addEventListener("click", openMobileMenu);
+document.getElementById("sidebar-backdrop").addEventListener("click", closeMobileMenu);
 
 const titles = {
   panel: ["Panel del curso", "Vista general de asistencia y trabajos practicos"],
