@@ -544,6 +544,7 @@ async function deleteAttendanceDate(date) {
 function renderAttendanceList() {
   const date = document.getElementById("attendance-date").value;
   const dayRecord = currentCourse().attendance[date] || {};
+  Object.keys(pendingAttendance).forEach(k => delete pendingAttendance[k]); // limpiar selecciones pendientes al cambiar de fecha
   const list = document.getElementById("attendance-list");
   if (!currentCourse().students.length) { list.innerHTML = emptyState("Todavia no hay alumnos cargados."); return; }
 
@@ -551,13 +552,14 @@ function renderAttendanceList() {
     .slice()
     .sort((a, b) => a.name.localeCompare(b.name, "es"))
     .map(s => {
-      const present = dayRecord[s.id] !== undefined ? dayRecord[s.id] : true;
+      const existing = dayRecord[s.id]; // true, false, o undefined (sin marcar)
+      const state = existing === true ? "present" : existing === false ? "absent" : "unset";
       return `
-      <div class="attendance-row" data-id="${s.id}">
+      <div class="attendance-row" data-id="${s.id}" data-state="${state}">
         <div class="attendance-name"><div class="avatar al_dia">${initials(s.name)}</div>${s.name}</div>
         <div class="toggle-group">
-          <button class="toggle-btn present ${present ? "active" : ""}" onclick="setPresent(${s.id}, true)">${ICON_CHECK} Presente</button>
-          <button class="toggle-btn absent ${!present ? "active" : ""}" onclick="setPresent(${s.id}, false)">${ICON_X} Ausente</button>
+          <button class="toggle-btn present ${existing === true ? "active" : ""}" onclick="setPresent(${s.id}, true)">${ICON_CHECK} Presente</button>
+          <button class="toggle-btn absent ${existing === false ? "active" : ""}" onclick="setPresent(${s.id}, false)">${ICON_X} Ausente</button>
         </div>
       </div>`;
     }).join("");
@@ -568,6 +570,7 @@ const pendingAttendance = {};
 function setPresent(id, present) {
   pendingAttendance[id] = present;
   const row = document.querySelector(`.attendance-row[data-id="${id}"]`);
+  row.dataset.state = present ? "present" : "absent";
   row.querySelector(".present").classList.toggle("active", present);
   row.querySelector(".absent").classList.toggle("active", !present);
 }
@@ -577,12 +580,19 @@ document.getElementById("btn-save-attendance").addEventListener("click", debounc
   if (!date) { showToast("Elegi una fecha", "error"); return; }
   const rows = document.querySelectorAll(".attendance-row");
   if (!rows.length) { showToast("Todavia no hay alumnos cargados.", "error"); return; }
-  if (!currentCourse().attendance[date]) currentCourse().attendance[date] = {};
+
+  const toSave = {};
   rows.forEach(row => {
     const id = Number(row.dataset.id);
-    const present = row.querySelector(".present").classList.contains("active");
-    currentCourse().attendance[date][id] = pendingAttendance[id] !== undefined ? pendingAttendance[id] : present;
+    const state = row.dataset.state;
+    if (state === "unset") return; // no se toco: no se guarda nada para este alumno en este dia
+    toSave[id] = state === "present";
   });
+
+  if (Object.keys(toSave).length === 0) { showToast("Marca presente o ausente para al menos un alumno", "error"); return; }
+
+  if (!currentCourse().attendance[date]) currentCourse().attendance[date] = {};
+  Object.assign(currentCourse().attendance[date], toSave);
   saveData();
   showToast("Asistencia guardada", "success");
 }));
