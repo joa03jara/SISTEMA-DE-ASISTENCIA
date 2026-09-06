@@ -592,4 +592,23 @@
 
     .tab-switch { margin-bottom: 10px; }
     .tab-btn { padding: 6px 13px; font-size: 12px; }
+
+    /* Menu lateral: achicar todo para que entre sin scroll */
+    .sidebar { padding: 14px 16px; }
+    .brand { padding: 0 4px 12px; margin-bottom: 10px; gap: 8px; }
+    .brand-icon { width: 32px; height: 32px; }
+    .brand-title { font-size: 14px; }
+    .brand-sub { font-size: 10px; margin: 0; }
+
+    .course-switcher { margin-bottom: 10px; }
+    .course-current-btn { padding: 7px 9px; font-size: 12px; }
+    .course-switcher button#btn-manage-courses { width: 32px; height: 32px; }
+
+    .nav { gap: 1px; }
+    .nav-item { padding: 8px 12px; font-size: 12.5px; gap: 9px; }
+    .nav-icon { font-size: 15px; }
+
+    .sidebar-footer { padding-top: 8px; }
+    .save-note { display: none; }
+    .logout-btn { font-size: 10.5px; padding: 3px 0; }
   }
