@@ -181,6 +181,10 @@ function statusFor(faltas) {
   return "al_dia";
 }
 
+function tpStatusLabel(status) {
+  return status === "al_dia" ? "TP al dia" : "TP atrasado";
+}
+
 function groupNameFor(student) {
   const g = currentCourse().groups.find(g => g.id === student.groupId);
   return g ? g.name : null;
@@ -195,10 +199,12 @@ function studentsWithInfo() {
         tp_name: tp.name,
         submitted: !!(currentCourse().submissions[tp.id] && currentCourse().submissions[tp.id][s.id]),
       }));
+      const tpStatus = (tps.length === 0 || tps.every(t => t.submitted)) ? "al_dia" : "atrasado";
       return {
         ...s,
         faltas,
         status: statusFor(faltas),
+        tpStatus,
         group_name: groupNameFor(s),
         tps,
       };
@@ -356,7 +362,7 @@ function renderPanelTable(students) {
   let html = `<table><thead><tr>
     <th>Alumno</th><th>Grupo</th><th class="text-center">Faltas</th>
     ${tpNames.map(n => `<th class="text-center">${n}</th>`).join("")}
-    <th class="text-center">Estado</th>
+    <th class="text-center">Estado</th><th class="text-center">Estado TP</th>
   </tr></thead><tbody>`;
   students.forEach(s => {
     html += `<tr>
@@ -365,6 +371,7 @@ function renderPanelTable(students) {
       <td class="text-center faltas-count">${s.faltas}</td>
       ${s.tps.map(t => `<td class="text-center">${t.submitted ? `<span class="check-yes">${ICON_CHECK}</span>` : `<span class="check-no">${ICON_X}</span>`}</td>`).join("")}
       <td class="text-center"><span class="status-pill ${s.status}">${statusLabel(s.status)}</span></td>
+      <td class="text-center"><span class="status-pill ${s.tpStatus === "al_dia" ? "al_dia" : "libre"}">${tpStatusLabel(s.tpStatus)}</span></td>
     </tr>`;
   });
   html += "</tbody></table>";
@@ -381,7 +388,7 @@ document.getElementById("search-panel").addEventListener("input", e => {
 function renderStudentsTable() {
   const students = studentsWithInfo();
   let html = `<table><thead><tr>
-    <th>Alumno</th><th>Grupo</th><th class="text-center">Faltas</th><th class="text-center">Estado</th><th></th>
+    <th>Alumno</th><th>Grupo</th><th class="text-center">Faltas</th><th class="text-center">Estado</th><th class="text-center">Estado TP</th><th></th>
   </tr></thead><tbody>`;
   students.forEach(s => {
     html += `<tr>
@@ -389,6 +396,7 @@ function renderStudentsTable() {
       <td>${s.group_name || "Individual"}</td>
       <td class="text-center faltas-count">${s.faltas}</td>
       <td class="text-center"><span class="status-pill ${s.status}">${statusLabel(s.status)}</span></td>
+      <td class="text-center"><span class="status-pill ${s.tpStatus === "al_dia" ? "al_dia" : "libre"}">${tpStatusLabel(s.tpStatus)}</span></td>
       <td class="text-center"><button class="link-btn" onclick="deleteStudent(${s.id})">${ICON_TRASH} Eliminar</button></td>
     </tr>`;
   });
@@ -541,10 +549,12 @@ async function deleteAttendanceDate(date) {
   showToast("Se elimino la asistencia de ese dia", "success");
 }
 
+const pendingAttendance = {}; // { fecha: { alumnoId: true/false } } -- borrador sin guardar, sobrevive a cambiar de seccion
+
 function renderAttendanceList() {
   const date = document.getElementById("attendance-date").value;
   const dayRecord = currentCourse().attendance[date] || {};
-  Object.keys(pendingAttendance).forEach(k => delete pendingAttendance[k]); // limpiar selecciones pendientes al cambiar de fecha
+  const pending = pendingAttendance[date] || {};
   const list = document.getElementById("attendance-list");
   if (!currentCourse().students.length) { list.innerHTML = emptyState("Todavia no hay alumnos cargados."); return; }
 
@@ -552,7 +562,7 @@ function renderAttendanceList() {
     .slice()
     .sort((a, b) => a.name.localeCompare(b.name, "es"))
     .map(s => {
-      const existing = dayRecord[s.id]; // true, false, o undefined (sin marcar)
+      const existing = pending[s.id] !== undefined ? pending[s.id] : dayRecord[s.id]; // true, false, o undefined (sin marcar)
       const state = existing === true ? "present" : existing === false ? "absent" : "unset";
       return `
       <div class="attendance-row" data-id="${s.id}" data-state="${state}">
@@ -565,10 +575,10 @@ function renderAttendanceList() {
     }).join("");
 }
 
-const pendingAttendance = {};
-
 function setPresent(id, present) {
-  pendingAttendance[id] = present;
+  const date = document.getElementById("attendance-date").value;
+  if (!pendingAttendance[date]) pendingAttendance[date] = {};
+  pendingAttendance[date][id] = present;
   const row = document.querySelector(`.attendance-row[data-id="${id}"]`);
   row.dataset.state = present ? "present" : "absent";
   row.querySelector(".present").classList.toggle("active", present);
@@ -593,6 +603,7 @@ document.getElementById("btn-save-attendance").addEventListener("click", debounc
 
   if (!currentCourse().attendance[date]) currentCourse().attendance[date] = {};
   Object.assign(currentCourse().attendance[date], toSave);
+  delete pendingAttendance[date]; // ya quedo guardado de verdad, el borrador ya no hace falta
   saveData();
   showToast("Asistencia guardada", "success");
 }));
@@ -774,9 +785,10 @@ function openProfile(id) {
         <p class="muted" style="margin:2px 0 0;">${s.group_name || "Individual"}</p>
       </div>
     </div>
-    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:11px; margin-bottom:18px;">
+    <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:9px; margin-bottom:18px;">
       <div class="stat-card"><p class="stat-label">Faltas</p><p class="stat-value">${s.faltas} / ${LIMITE_FALTAS}</p></div>
-      <div class="stat-card"><p class="stat-label">Estado</p><p class="stat-value" style="font-size:17px;">${statusLabel(s.status)}</p></div>
+      <div class="stat-card"><p class="stat-label">Estado</p><p class="stat-value" style="font-size:15px;">${statusLabel(s.status)}</p></div>
+      <div class="stat-card"><p class="stat-label">Estado TP</p><p class="stat-value" style="font-size:15px;">${tpStatusLabel(s.tpStatus)}</p></div>
     </div>
     <p style="font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-secondary); margin: 0 0 9px;">Trabajos practicos</p>
     <div style="display:flex; flex-direction:column; gap:6px; margin-bottom:20px;">
