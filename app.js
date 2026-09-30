@@ -181,8 +181,22 @@ function statusFor(faltas) {
   return "al_dia";
 }
 
-function tpStatusLabel(status) {
-  return status === "al_dia" ? "TP al dia" : "TP atrasado";
+// Estado de TP con conteo: "4/4 al dia", "Debe 1 (3/4)", "Sin entregas (0/4)"
+function tpStatusLabel(s) {
+  if (s.tpTotal === 0) return "Sin TPs";
+  if (s.tpStatus === "al_dia") return `Al dia ${s.tpDone}/${s.tpTotal}`;
+  if (s.tpStatus === "parcial") return `Debe ${s.tpTotal - s.tpDone} (${s.tpDone}/${s.tpTotal})`;
+  return `Sin entregas 0/${s.tpTotal}`;
+}
+
+function tpPillClass(s) {
+  if (s.tpStatus === "al_dia") return "al_dia";
+  if (s.tpStatus === "parcial") return "riesgo";
+  return "libre";
+}
+
+function tpPill(s) {
+  return `<span class="status-pill ${tpPillClass(s)}" title="Entrego ${s.tpDone} de ${s.tpTotal} TP">${tpStatusLabel(s)}</span>`;
 }
 
 function groupNameFor(student) {
@@ -199,12 +213,16 @@ function studentsWithInfo() {
         tp_name: tp.name,
         submitted: !!(currentCourse().submissions[tp.id] && currentCourse().submissions[tp.id][s.id]),
       }));
-      const tpStatus = (tps.length === 0 || tps.every(t => t.submitted)) ? "al_dia" : "atrasado";
+      const tpDone = tps.filter(t => t.submitted).length;
+      const tpTotal = tps.length;
+      const tpStatus = (tpTotal === 0 || tpDone === tpTotal) ? "al_dia" : tpDone > 0 ? "parcial" : "sin_entregas";
       return {
         ...s,
         faltas,
         status: statusFor(faltas),
         tpStatus,
+        tpDone,
+        tpTotal,
         group_name: groupNameFor(s),
         tps,
       };
@@ -235,6 +253,8 @@ function nameTaken(list, name, excludeId = null) {
 const ICON_CHECK = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="4.5 12.5 9.5 17.5 19.5 6.5"/></svg>';
 const ICON_X = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>';
 const ICON_TRASH = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 20 7"/><path d="M6.5 7V5a1.5 1.5 0 0 1 1.5-1.5h8A1.5 1.5 0 0 1 17.5 5v2"/><path d="M6.5 7l1 12.5A1.5 1.5 0 0 0 9 21h6a1.5 1.5 0 0 0 1.5-1.5L17.5 7"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>';
+
+const ICON_PENCIL = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>';
 
 // ---------- Notificaciones propias (reemplazan alert / confirm) ----------
 
@@ -302,7 +322,7 @@ const titles = {
   alumnos: ["Alumnos", "Cargar y administrar el listado del curso"],
   asistencia: ["Tomar asistencia", "Se guarda por fecha, miercoles y viernes"],
   tps: ["Trabajos practicos", "Marca entregas por grupo o individuales"],
-  grupos: ["Grupos", "Se arman una vez y quedan fijos"],
+  grupos: ["Grupos", "Arma y edita los grupos del curso"],
 };
 
 function switchView(v) {
@@ -371,7 +391,7 @@ function renderPanelTable(students) {
       <td class="text-center faltas-count">${s.faltas}</td>
       ${s.tps.map(t => `<td class="text-center">${t.submitted ? `<span class="check-yes">${ICON_CHECK}</span>` : `<span class="check-no">${ICON_X}</span>`}</td>`).join("")}
       <td class="text-center"><span class="status-pill ${s.status}">${statusLabel(s.status)}</span></td>
-      <td class="text-center"><span class="status-pill ${s.tpStatus === "al_dia" ? "al_dia" : "libre"}">${tpStatusLabel(s.tpStatus)}</span></td>
+      <td class="text-center">${tpPill(s)}</td>
     </tr>`;
   });
   html += "</tbody></table>";
@@ -396,7 +416,7 @@ function renderStudentsTable() {
       <td>${s.group_name || "Individual"}</td>
       <td class="text-center faltas-count">${s.faltas}</td>
       <td class="text-center"><span class="status-pill ${s.status}">${statusLabel(s.status)}</span></td>
-      <td class="text-center"><span class="status-pill ${s.tpStatus === "al_dia" ? "al_dia" : "libre"}">${tpStatusLabel(s.tpStatus)}</span></td>
+      <td class="text-center">${tpPill(s)}</td>
       <td class="text-center"><button class="link-btn" onclick="deleteStudent(${s.id})">${ICON_TRASH} Eliminar</button></td>
     </tr>`;
   });
@@ -610,29 +630,56 @@ document.getElementById("btn-save-attendance").addEventListener("click", debounc
 
 // ---------- TPs ----------
 
+const openTps = new Set(); // TPs expandidos (acordeon). Arrancan todos cerrados.
+const ICON_CHEVRON = '<svg class="tp-chevron" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
+
+function isSubmitted(tpId, studentId) {
+  return !!(currentCourse().submissions[tpId] && currentCourse().submissions[tpId][studentId]);
+}
+
 function renderTpList() {
   const container = document.getElementById("tp-list");
   if (!currentCourse().tps.length) { container.innerHTML = emptyState("Todavia no cargaste ningun TP."); return; }
 
   const individuals = currentCourse().students.filter(s => !s.groupId).sort((a, b) => a.name.localeCompare(b.name, "es"));
   const groups = currentCourse().groups.slice().sort((a, b) => a.name.localeCompare(b.name, "es"));
+  const groupsWithMembers = groups
+    .map(g => ({ g, members: currentCourse().students.filter(s => s.groupId === g.id) }))
+    .filter(x => x.members.length);
 
-  container.innerHTML = currentCourse().tps.map(tp => `
-    <div class="tp-block">
-      <div class="tp-block-head">
-        <p class="tp-block-title">${tp.name}</p>
-        <div style="display:flex; align-items:center; gap:14px;">
+  const toolbar = currentCourse().tps.length > 1 ? `
+    <div class="tp-toolbar">
+      <button class="tp-toolbar-btn" onclick="setAllTps(true)">Expandir todos</button>
+      <button class="tp-toolbar-btn" onclick="setAllTps(false)">Contraer todos</button>
+    </div>` : "";
+
+  container.innerHTML = toolbar + currentCourse().tps.map(tp => {
+    const isOpen = openTps.has(tp.id);
+    // Resumen para el encabezado: cuantas "entregas" (grupos + individuales) estan completas
+    const units = groupsWithMembers.length + individuals.length;
+    const doneUnits = groupsWithMembers.filter(x => x.members.every(m => isSubmitted(tp.id, m.id))).length
+      + individuals.filter(s => isSubmitted(tp.id, s.id)).length;
+    const summaryClass = units > 0 && doneUnits === units ? "done" : doneUnits > 0 ? "partial" : "none";
+
+    return `
+    <div class="tp-block ${isOpen ? "open" : ""}">
+      <div class="tp-block-head" onclick="toggleTpOpen(${tp.id})" role="button" aria-expanded="${isOpen}">
+        <div class="tp-block-head-left">
+          ${ICON_CHEVRON}
+          <p class="tp-block-title">${tp.name}</p>
+          <span class="tp-summary ${summaryClass}">${doneUnits}/${units} entregados</span>
+        </div>
+        <div class="tp-block-head-right">
           <span class="tp-block-date">${tp.date || ""}</span>
-          <button class="tp-del" onclick="deleteTp(${tp.id})">${ICON_TRASH} Eliminar</button>
+          <button class="tp-del" onclick="event.stopPropagation(); deleteTp(${tp.id})">${ICON_TRASH} Eliminar</button>
         </div>
       </div>
-      <div class="tp-members">
-        ${groups.map(g => {
-          const members = currentCourse().students.filter(s => s.groupId === g.id);
-          if (!members.length) return "";
-          const submitted = members.length && members.every(m => !!(currentCourse().submissions[tp.id] && currentCourse().submissions[tp.id][m.id]));
-          const repId = members[0].id;
-          return `<div class="tp-row group-row ${submitted ? "submitted" : ""}" onclick="toggleTpSubmission(${tp.id}, ${repId})">
+      <div class="tp-members ${isOpen ? "" : "hidden"}">
+        ${groupsWithMembers.map(({ g, members }) => {
+          const doneCount = members.filter(m => isSubmitted(tp.id, m.id)).length;
+          const state = doneCount === members.length ? "submitted" : doneCount > 0 ? "partial" : "";
+          const label = state === "submitted" ? "Entregado" : state === "partial" ? `Parcial (${doneCount}/${members.length})` : "Pendiente";
+          return `<div class="tp-row group-row ${state}" onclick="toggleTpSubmission(${tp.id}, ${members[0].id})">
             <div class="tp-row-info">
               <div class="avatar al_dia">${initials(g.name)}</div>
               <div class="tp-row-text">
@@ -640,11 +687,11 @@ function renderTpList() {
                 <p class="tp-row-sub">${members.map(m => m.name).join(", ")}</p>
               </div>
             </div>
-            <div class="tp-status"><span class="tp-status-dot"></span>${submitted ? "Entregado" : "Pendiente"}</div>
+            <div class="tp-status"><span class="tp-status-dot"></span>${label}</div>
           </div>`;
         }).join("")}
         ${individuals.map(s => {
-          const submitted = !!(currentCourse().submissions[tp.id] && currentCourse().submissions[tp.id][s.id]);
+          const submitted = isSubmitted(tp.id, s.id);
           return `<div class="tp-row ${submitted ? "submitted" : ""}" onclick="toggleTpSubmission(${tp.id}, ${s.id})">
             <div class="tp-row-info">
               <div class="avatar al_dia">${initials(s.name)}</div>
@@ -653,23 +700,33 @@ function renderTpList() {
             <div class="tp-status"><span class="tp-status-dot"></span>${submitted ? "Entregado" : "Pendiente"}</div>
           </div>`;
         }).join("")}
-        ${(!groups.some(g => currentCourse().students.some(s => s.groupId === g.id)) && !individuals.length) ? emptyState("Todavia no hay alumnos cargados.") : ""}
+        ${(!groupsWithMembers.length && !individuals.length) ? emptyState("Todavia no hay alumnos cargados.") : ""}
       </div>
-    </div>
-  `).join("");
+    </div>`;
+  }).join("");
+}
+
+function toggleTpOpen(tpId) {
+  if (openTps.has(tpId)) openTps.delete(tpId); else openTps.add(tpId);
+  renderTpList();
+}
+
+function setAllTps(open) {
+  openTps.clear();
+  if (open) currentCourse().tps.forEach(t => openTps.add(t.id));
+  renderTpList();
 }
 
 function toggleTpSubmission(tpId, studentId) {
   if (!currentCourse().submissions[tpId]) currentCourse().submissions[tpId] = {};
-  const current = !!currentCourse().submissions[tpId][studentId];
-  const newValue = !current;
-
   const student = currentCourse().students.find(s => s.id === studentId);
   let ids = [studentId];
   if (student.groupId) {
     ids = currentCourse().students.filter(s => s.groupId === student.groupId).map(s => s.id);
   }
-  ids.forEach(id => { currentCourse().submissions[tpId][id] = newValue; });
+  // Si todos ya lo tenian entregado, se desmarca; si faltaba alguno (pendiente o parcial), se marca a todos
+  const allDone = ids.every(id => !!currentCourse().submissions[tpId][id]);
+  ids.forEach(id => { currentCourse().submissions[tpId][id] = !allDone; });
   saveData();
   renderTpList();
 }
@@ -732,11 +789,14 @@ function renderGroupList() {
       <div class="group-card-head">
         <div class="group-card-icon">${initials(g.name)}</div>
         <div>
-          <p class="group-card-name">${g.name}</p>
+          <p class="group-card-name">${g.name} <span class="group-card-count">${members.length} integrante${members.length === 1 ? "" : "s"}</span></p>
           <p class="group-card-members">${members.map(m => m.name).join(", ") || "Sin integrantes"}</p>
         </div>
       </div>
-      <button class="link-btn" onclick="deleteGroup(${g.id})">${ICON_TRASH} Eliminar</button>
+      <div class="group-card-actions">
+        <button class="btn btn-small" onclick="openGroupEditor(${g.id})">${ICON_PENCIL} Editar</button>
+        <button class="link-btn" onclick="deleteGroup(${g.id})">${ICON_TRASH} Eliminar</button>
+      </div>
     </div>`;
   }).join("");
 }
@@ -770,6 +830,132 @@ async function deleteGroup(id) {
   renderGroupList();
 }
 
+// ---------- Editar grupo ----------
+
+let groupEdit = null; // { groupId, members: [ids] } copia de trabajo, se aplica al guardar
+
+function openGroupEditor(groupId) {
+  const g = currentCourse().groups.find(x => x.id === groupId);
+  if (!g) return;
+  groupEdit = {
+    groupId,
+    name: g.name,
+    members: currentCourse().students.filter(s => s.groupId === groupId).map(s => s.id),
+    search: "",
+  };
+  renderGroupEditor();
+  document.getElementById("modal-overlay").classList.remove("hidden");
+}
+
+function renderGroupEditor() {
+  const g = currentCourse().groups.find(x => x.id === groupEdit.groupId);
+  const byName = (a, b) => a.name.localeCompare(b.name, "es");
+  const members = groupEdit.members.map(id => currentCourse().students.find(s => s.id === id)).filter(Boolean).sort(byName);
+  const q = groupEdit.search.trim().toLowerCase();
+  const candidates = currentCourse().students
+    .filter(s => !groupEdit.members.includes(s.id))
+    .filter(s => !q || s.name.toLowerCase().includes(q))
+    .sort((a, b) => {
+      // primero los que estan solos (individuales), despues los de otros grupos
+      if (!a.groupId !== !b.groupId) return a.groupId ? 1 : -1;
+      return byName(a, b);
+    });
+  const max = currentCourse().maxGroupSize;
+  const over = members.length > max;
+
+  document.getElementById("modal-content").innerHTML = `
+    <button class="modal-close" onclick="closeModal()">Cerrar</button>
+    <p class="ge-title">Editar grupo</p>
+    <p class="muted small" style="margin:0 0 16px;">Podes cambiar el nombre, sacar integrantes o sumar a alguien (aunque el grupo pase el limite de ${max}).</p>
+
+    <p class="ge-label">Nombre</p>
+    <input type="text" id="ge-name" class="input-inline" style="width:100%; margin-bottom:18px;" value="${groupEdit.name.replace(/"/g, "&quot;")}">
+
+    <p class="ge-label">Integrantes (${members.length})</p>
+    <div class="ge-list">
+      ${members.length ? members.map(s => `
+        <div class="ge-row">
+          <div class="ge-row-name"><div class="avatar al_dia">${initials(s.name)}</div>${s.name}</div>
+          <button class="link-btn" onclick="groupEditRemove(${s.id})">${ICON_X} Quitar</button>
+        </div>`).join("") : '<p class="muted small" style="padding:10px 2px;">El grupo no tiene integrantes.</p>'}
+    </div>
+    ${over ? `<p class="ge-note">Este grupo va a quedar con ${members.length} integrantes (el limite general es ${max}). Se permite igual.</p>` : ""}
+
+    <p class="ge-label" style="margin-top:18px;">Sumar integrante</p>
+    <input type="text" id="ge-search" class="input-inline" style="width:100%; margin-bottom:8px;" placeholder="Buscar alumno..." value="${groupEdit.search.replace(/"/g, "&quot;")}">
+    <div class="ge-list ge-candidates">
+      ${candidates.length ? candidates.map(s => {
+        const gName = groupNameFor(s);
+        return `
+        <div class="ge-row">
+          <div class="ge-row-name">
+            <div class="avatar al_dia">${initials(s.name)}</div>
+            <div><div>${s.name}</div><div class="ge-row-sub">${gName ? `Esta en ${gName}` : "Sin grupo (individual)"}</div></div>
+          </div>
+          <button class="btn btn-small" onclick="groupEditAdd(${s.id})">+ ${gName ? "Mover aca" : "Agregar"}</button>
+        </div>`;
+      }).join("") : '<p class="muted small" style="padding:10px 2px;">No hay alumnos para sumar.</p>'}
+    </div>
+
+    <div class="confirm-actions" style="margin-top:20px;">
+      <button class="btn" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-accent" onclick="saveGroupEdit()">Guardar cambios</button>
+    </div>
+  `;
+
+  const nameInput = document.getElementById("ge-name");
+  nameInput.addEventListener("input", e => { groupEdit.name = e.target.value; });
+  const search = document.getElementById("ge-search");
+  search.addEventListener("input", e => {
+    groupEdit.search = e.target.value;
+    const pos = e.target.selectionStart;
+    renderGroupEditor();
+    const again = document.getElementById("ge-search");
+    again.focus();
+    again.setSelectionRange(pos, pos);
+  });
+}
+
+function groupEditRemove(id) {
+  groupEdit.members = groupEdit.members.filter(x => x !== id);
+  renderGroupEditor();
+}
+
+function groupEditAdd(id) {
+  if (!groupEdit.members.includes(id)) groupEdit.members.push(id);
+  renderGroupEditor();
+}
+
+function saveGroupEdit() {
+  const g = currentCourse().groups.find(x => x.id === groupEdit.groupId);
+  if (!g) { closeModal(); return; }
+  const name = groupEdit.name.trim();
+  if (!name) { showToast("El nombre del grupo no puede quedar vacio", "error"); return; }
+  if (nameTaken(currentCourse().groups, name, g.id)) { showToast("Ya existe otro grupo con ese nombre.", "error"); return; }
+  if (!groupEdit.members.length) { showToast("El grupo necesita al menos un integrante. Si ya no sirve, eliminalo.", "error"); return; }
+
+  g.name = name;
+  const newSet = new Set(groupEdit.members);
+  const emptied = new Set();
+  currentCourse().students.forEach(s => {
+    if (s.groupId === g.id && !newSet.has(s.id)) s.groupId = null; // sale del grupo -> queda individual
+    if (newSet.has(s.id) && s.groupId !== g.id) {
+      if (s.groupId) emptied.add(s.groupId);
+      s.groupId = g.id; // entra al grupo (si venia de otro, se mueve)
+    }
+  });
+  saveData();
+  closeModal();
+  groupEdit = null;
+  selectedPick = selectedPick.filter(id => !newSet.has(id));
+  renderGroupPicker();
+  renderGroupList();
+
+  const leftEmpty = [...emptied].map(id => currentCourse().groups.find(x => x.id === id))
+    .filter(x => x && !currentCourse().students.some(s => s.groupId === x.id));
+  showToast(leftEmpty.length ? `Grupo actualizado. ${leftEmpty.map(x => x.name).join(", ")} quedo sin integrantes.` : "Grupo actualizado", "success");
+}
+
 // ---------- Student profile modal ----------
 
 function openProfile(id) {
@@ -788,7 +974,7 @@ function openProfile(id) {
     <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:9px; margin-bottom:18px;">
       <div class="stat-card"><p class="stat-label">Faltas</p><p class="stat-value">${s.faltas} / ${LIMITE_FALTAS}</p></div>
       <div class="stat-card"><p class="stat-label">Estado</p><p class="stat-value" style="font-size:15px;">${statusLabel(s.status)}</p></div>
-      <div class="stat-card"><p class="stat-label">Estado TP</p><p class="stat-value" style="font-size:15px;">${tpStatusLabel(s.tpStatus)}</p></div>
+      <div class="stat-card"><p class="stat-label">Estado TP</p><p class="stat-value" style="font-size:15px;">${tpStatusLabel(s)}</p></div>
     </div>
     <p style="font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-secondary); margin: 0 0 9px;">Trabajos practicos</p>
     <div style="display:flex; flex-direction:column; gap:6px; margin-bottom:20px;">
@@ -916,7 +1102,6 @@ function renderCourseManagerContent() {
   });
 }
 
-const ICON_PENCIL = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>';
 
 function renderCourseManagerList() {
   const list = document.getElementById("course-manager-list");
