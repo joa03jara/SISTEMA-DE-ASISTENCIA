@@ -390,15 +390,20 @@ function renderPanelTable(students) {
     <th>Alumno</th><th>Grupo</th><th class="text-center">Faltas</th>
     ${tpNames.map(n => `<th class="text-center">${esc(n)}</th>`).join("")}
     <th class="text-center">Estado</th><th class="text-center">Estado TP</th>
+    ${EXAMS.map(e => `<th class="text-center">${e.short}</th>`).join("")}
+    <th class="text-center">Promedio</th>
   </tr></thead><tbody>`;
   students.forEach(s => {
-    html += `<tr>
+    const gi = gradeInfo(s);
+    html += `<tr id="nota-row-${s.id}" class="${gi.alerta ? "row-alerta" : ""}" ${gi.alerta ? `title="${esc(gi.alerta)}: tiene nota cargada"` : ""}>
       <td><div class="name-cell" onclick="openProfile(${s.id})"><div class="avatar ${s.status}">${initials(s.name)}</div>${esc(s.name)}</div></td>
       <td>${esc(s.group_name || "Individual")}</td>
       <td class="text-center faltas-count">${s.faltas}</td>
       ${s.tps.map(t => `<td class="text-center">${t.submitted ? `<span class="check-yes">${ICON_CHECK}</span>` : `<span class="check-no">${ICON_X}</span>`}</td>`).join("")}
       <td class="text-center"><span class="status-pill ${s.status}">${statusLabel(s.status)}</span></td>
       <td class="text-center">${tpPill(s)}</td>
+      ${EXAMS.map(e => gradeCellHtml(s, e, false)).join("")}
+      <td class="text-center" data-role="prom">${gradeSituationCells(gi).prom}</td>
     </tr>`;
   });
   html += "</tbody></table>";
@@ -1027,7 +1032,7 @@ document.getElementById("modal-overlay").addEventListener("click", e => {
 const EXAMS = [
   { key: "p1", label: "1er parcial", short: "1er parcial", tema: true },
   { key: "p2", label: "2do parcial", short: "2do parcial", tema: true },
-  { key: "pi", label: "Proyecto integrador", short: "Proyecto", tema: false },
+  { key: "pi", label: "Proyecto integrador", short: "Integrador", tema: false },
 ];
 
 function minPromo() {
@@ -1157,11 +1162,11 @@ function renderNotasSummary() {
   `;
 }
 
-function gradeCellHtml(s, exam) {
+function gradeCellHtml(s, exam, withTema = true) {
   const g = getGrade(exam.key, s.id);
   const nota = g && g.nota != null ? g.nota : null;
   const tema = g && g.tema ? g.tema : "";
-  const temaSel = exam.tema ? `<select class="tema-select" title="Tema del examen" onchange="onTemaChange('${exam.key}', ${s.id}, this.value)">
+  const temaSel = exam.tema && withTema ? `<select class="tema-select" title="Tema del examen" onchange="onTemaChange('${exam.key}', ${s.id}, this.value)">
       ${["", "A", "B", "C", "D"].map(t => `<option value="${t}" ${t === tema ? "selected" : ""}>${t || "Tema"}</option>`).join("")}
     </select>` : "";
   return `<td class="text-center"><div class="nota-cell">${temaSel}
@@ -1203,7 +1208,8 @@ function refreshNotaRow(studentId) {
   const gi = gradeInfo(s);
   const cells = gradeSituationCells(gi);
   row.querySelector('[data-role="prom"]').innerHTML = cells.prom;
-  row.querySelector('[data-role="sit"]').innerHTML = cells.sit;
+  const sit = row.querySelector('[data-role="sit"]');
+  if (sit) sit.innerHTML = cells.sit;
   row.classList.toggle("row-alerta", !!gi.alerta);
 }
 
@@ -1221,7 +1227,7 @@ function onNotaChange(exam, studentId, el) {
   saveData();
   el.value = fmtNota(nota);
   refreshNotaRow(studentId);
-  renderNotasSummary();
+  if (view === "notas") renderNotasSummary();
 }
 
 function onTemaChange(exam, studentId, tema) {
