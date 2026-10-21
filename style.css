@@ -647,3 +647,27 @@
     .save-note { display: none; }
     .logout-btn { font-size: 10.5px; padding: 3px 0; }
   }
+
+
+  /* ---------- Notas ---------- */
+  .notas-import > summary { cursor: pointer; list-style: none; border-bottom: none; }
+  .notas-import > summary::-webkit-details-marker { display: none; }
+  .notas-import[open] > summary { border-bottom: 1px solid var(--line); }
+  .nota-input { width: 64px; text-align: center; border: 1px solid var(--line); border-radius: 8px; padding: 7px 4px; font-family: var(--font-mono); font-size: 14px; font-weight: 700; background: var(--paper-raised); color: var(--text-primary); outline: none; }
+  .nota-input:focus { border-color: var(--accent); }
+  .nota-input.hi { background: var(--success-light); color: var(--success-dark); border-color: transparent; }
+  .nota-input.mid { background: var(--amber-light); color: var(--amber-dark); border-color: transparent; }
+  .nota-input.low { background: var(--coral-light); color: var(--coral-dark); border-color: transparent; }
+  .tema-select { border: 1px solid var(--line); border-radius: 8px; padding: 6px 2px; font-size: 12.5px; background: var(--paper-raised); color: var(--text-secondary); font-family: var(--font-body); }
+  .nota-cell { display: flex; gap: 5px; align-items: center; justify-content: center; }
+  tr.row-alerta td { background: var(--coral-light); }
+  .notas-alert { background: var(--coral-light); border: 1px solid #f1b9b5; color: var(--coral-dark); border-radius: 14px; padding: 14px 18px; margin-bottom: 16px; font-size: 14px; }
+  .notas-alert strong { display: block; margin-bottom: 6px; font-family: var(--font-display); }
+  .notas-alert ul { margin: 0; padding-left: 18px; }
+  .notas-alert.ok { background: var(--success-light); border-color: #b5e2c9; color: var(--success-dark); }
+  .asist-mini { font-size: 12px; color: var(--text-secondary); font-family: var(--font-mono); white-space: nowrap; }
+  .grade-line { display: flex; justify-content: space-between; font-size: 13.5px; padding: 7px 0; border-bottom: 1px solid var(--line); }
+  .tema-select { width: 62px; }
+  #table-notas td, #table-notas th { padding: 9px 10px; }
+  #table-notas .name-cell { white-space: nowrap; }
+  .nota-input { width: 54px; }

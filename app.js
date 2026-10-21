@@ -18,7 +18,7 @@ const db = firebase.firestore();
 db.enablePersistence({ synchronizeTabs: true }).catch(() => { /* ya estaba habilitado o el navegador no lo soporta */ });
 
 function emptyCourseData() {
-  return { students: [], groups: [], attendance: {}, tps: [], submissions: {}, maxGroupSize: 4 };
+  return { students: [], groups: [], attendance: {}, tps: [], submissions: {}, maxGroupSize: 4, grades: {}, minPromo: 7 };
 }
 
 function defaultData() {
@@ -230,6 +230,11 @@ function studentsWithInfo() {
     .sort((a, b) => a.name.localeCompare(b.name, "es"));
 }
 
+// Escapa texto del usuario antes de meterlo en el HTML (nombres con <, & o comillas)
+function esc(str) {
+  return String(str ?? "").replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+}
+
 function emptyState(msg) { return `<div class="empty-state">${msg}</div>`; }
 
 // Evita que un doble toque / doble clic dispare la accion dos veces
@@ -322,6 +327,7 @@ const titles = {
   alumnos: ["Alumnos", "Cargar y administrar el listado del curso"],
   asistencia: ["Tomar asistencia", "Se guarda por fecha, miercoles y viernes"],
   tps: ["Trabajos practicos", "Marca entregas por grupo o individuales"],
+  notas: ["Notas", "Parciales, proyecto integrador y control de asistencia"],
   grupos: ["Grupos", "Arma y edita los grupos del curso"],
 };
 
@@ -337,6 +343,7 @@ function switchView(v) {
   if (v === "alumnos") renderStudentsTable();
   if (v === "asistencia") renderAttendance();
   if (v === "tps") renderTpList();
+  if (v === "notas") renderNotas();
   if (v === "grupos") { selectedPick = []; syncGroupSizeUI(); renderGroupPicker(); renderGroupList(); }
 }
 
@@ -381,13 +388,13 @@ function renderPanelTable(students) {
   const tpNames = currentCourse().tps.map(t => t.name);
   let html = `<table><thead><tr>
     <th>Alumno</th><th>Grupo</th><th class="text-center">Faltas</th>
-    ${tpNames.map(n => `<th class="text-center">${n}</th>`).join("")}
+    ${tpNames.map(n => `<th class="text-center">${esc(n)}</th>`).join("")}
     <th class="text-center">Estado</th><th class="text-center">Estado TP</th>
   </tr></thead><tbody>`;
   students.forEach(s => {
     html += `<tr>
-      <td><div class="name-cell" onclick="openProfile(${s.id})"><div class="avatar ${s.status}">${initials(s.name)}</div>${s.name}</div></td>
-      <td>${s.group_name || "Individual"}</td>
+      <td><div class="name-cell" onclick="openProfile(${s.id})"><div class="avatar ${s.status}">${initials(s.name)}</div>${esc(s.name)}</div></td>
+      <td>${esc(s.group_name || "Individual")}</td>
       <td class="text-center faltas-count">${s.faltas}</td>
       ${s.tps.map(t => `<td class="text-center">${t.submitted ? `<span class="check-yes">${ICON_CHECK}</span>` : `<span class="check-no">${ICON_X}</span>`}</td>`).join("")}
       <td class="text-center"><span class="status-pill ${s.status}">${statusLabel(s.status)}</span></td>
@@ -412,8 +419,8 @@ function renderStudentsTable() {
   </tr></thead><tbody>`;
   students.forEach(s => {
     html += `<tr>
-      <td><div class="name-cell" onclick="openProfile(${s.id})"><div class="avatar ${s.status}">${initials(s.name)}</div>${s.name}</div></td>
-      <td>${s.group_name || "Individual"}</td>
+      <td><div class="name-cell" onclick="openProfile(${s.id})"><div class="avatar ${s.status}">${initials(s.name)}</div>${esc(s.name)}</div></td>
+      <td>${esc(s.group_name || "Individual")}</td>
       <td class="text-center faltas-count">${s.faltas}</td>
       <td class="text-center"><span class="status-pill ${s.status}">${statusLabel(s.status)}</span></td>
       <td class="text-center">${tpPill(s)}</td>
@@ -470,13 +477,18 @@ async function deleteStudent(id) {
   currentCourse().students = currentCourse().students.filter(s => s.id !== id);
   Object.values(currentCourse().attendance).forEach(day => { delete day[id]; });
   Object.values(currentCourse().submissions).forEach(sub => { delete sub[id]; });
+  Object.values(currentCourse().grades || {}).forEach(g => { delete g[id]; });
   saveData();
   renderStudentsTable();
 }
 
 // ---------- Asistencia ----------
 
-function todayStr() { return new Date().toISOString().slice(0, 10); }
+// Fecha local (toISOString usa UTC y de noche devolvia el dia siguiente)
+function todayStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 
 function renderAttendance() {
   const dateInput = document.getElementById("attendance-date");
@@ -535,7 +547,7 @@ function renderAttendanceHistory() {
   html += '<th class="text-center">Faltas</th></tr></thead><tbody>';
 
   students.forEach(s => {
-    html += `<tr><td class="sticky-col"><div class="name-cell" onclick="openProfile(${s.id})"><div class="avatar al_dia">${initials(s.name)}</div>${s.name}</div></td>`;
+    html += `<tr><td class="sticky-col"><div class="name-cell" onclick="openProfile(${s.id})"><div class="avatar al_dia">${initials(s.name)}</div>${esc(s.name)}</div></td>`;
     let faltas = 0;
     dates.forEach(date => {
       const dayRecord = currentCourse().attendance[date];
@@ -586,7 +598,7 @@ function renderAttendanceList() {
       const state = existing === true ? "present" : existing === false ? "absent" : "unset";
       return `
       <div class="attendance-row" data-id="${s.id}" data-state="${state}">
-        <div class="attendance-name"><div class="avatar al_dia">${initials(s.name)}</div>${s.name}</div>
+        <div class="attendance-name"><div class="avatar al_dia">${initials(s.name)}</div>${esc(s.name)}</div>
         <div class="toggle-group">
           <button class="toggle-btn present ${existing === true ? "active" : ""}" onclick="setPresent(${s.id}, true)">${ICON_CHECK} Presente</button>
           <button class="toggle-btn absent ${existing === false ? "active" : ""}" onclick="setPresent(${s.id}, false)">${ICON_X} Ausente</button>
@@ -666,7 +678,7 @@ function renderTpList() {
       <div class="tp-block-head" onclick="toggleTpOpen(${tp.id})" role="button" aria-expanded="${isOpen}">
         <div class="tp-block-head-left">
           ${ICON_CHEVRON}
-          <p class="tp-block-title">${tp.name}</p>
+          <p class="tp-block-title">${esc(tp.name)}</p>
           <span class="tp-summary ${summaryClass}">${doneUnits}/${units} entregados</span>
         </div>
         <div class="tp-block-head-right">
@@ -683,8 +695,8 @@ function renderTpList() {
             <div class="tp-row-info">
               <div class="avatar al_dia">${initials(g.name)}</div>
               <div class="tp-row-text">
-                <p class="tp-row-name">${g.name}</p>
-                <p class="tp-row-sub">${members.map(m => m.name).join(", ")}</p>
+                <p class="tp-row-name">${esc(g.name)}</p>
+                <p class="tp-row-sub">${esc(members.map(m => m.name).join(", "))}</p>
               </div>
             </div>
             <div class="tp-status"><span class="tp-status-dot"></span>${label}</div>
@@ -695,7 +707,7 @@ function renderTpList() {
           return `<div class="tp-row ${submitted ? "submitted" : ""}" onclick="toggleTpSubmission(${tp.id}, ${s.id})">
             <div class="tp-row-info">
               <div class="avatar al_dia">${initials(s.name)}</div>
-              <div class="tp-row-text"><p class="tp-row-name">${s.name}</p></div>
+              <div class="tp-row-text"><p class="tp-row-name">${esc(s.name)}</p></div>
             </div>
             <div class="tp-status"><span class="tp-status-dot"></span>${submitted ? "Entregado" : "Pendiente"}</div>
           </div>`;
@@ -764,7 +776,7 @@ function renderGroupPicker() {
   if (!available.length) { picker.innerHTML = emptyState("Todos los alumnos ya estan en un grupo, o todavia no cargaste alumnos."); return; }
   picker.innerHTML = available.map(s => `
     <div class="pick-chip ${selectedPick.includes(s.id) ? "selected" : ""}" onclick="togglePick(${s.id})">
-      <span class="pick-chip-box">&#10003;</span>${s.name}
+      <span class="pick-chip-box">&#10003;</span>${esc(s.name)}
     </div>
   `).join("");
 }
@@ -789,8 +801,8 @@ function renderGroupList() {
       <div class="group-card-head">
         <div class="group-card-icon">${initials(g.name)}</div>
         <div>
-          <p class="group-card-name">${g.name} <span class="group-card-count">${members.length} integrante${members.length === 1 ? "" : "s"}</span></p>
-          <p class="group-card-members">${members.map(m => m.name).join(", ") || "Sin integrantes"}</p>
+          <p class="group-card-name">${esc(g.name)} <span class="group-card-count">${members.length} integrante${members.length === 1 ? "" : "s"}</span></p>
+          <p class="group-card-members">${esc(members.map(m => m.name).join(", ")) || "Sin integrantes"}</p>
         </div>
       </div>
       <div class="group-card-actions">
@@ -869,20 +881,20 @@ function renderGroupEditor() {
     <p class="muted small" style="margin:0 0 16px;">Podes cambiar el nombre, sacar integrantes o sumar a alguien (aunque el grupo pase el limite de ${max}).</p>
 
     <p class="ge-label">Nombre</p>
-    <input type="text" id="ge-name" class="input-inline" style="width:100%; margin-bottom:18px;" value="${groupEdit.name.replace(/"/g, "&quot;")}">
+    <input type="text" id="ge-name" class="input-inline" style="width:100%; margin-bottom:18px;" value="${esc(groupEdit.name)}">
 
     <p class="ge-label">Integrantes (${members.length})</p>
     <div class="ge-list">
       ${members.length ? members.map(s => `
         <div class="ge-row">
-          <div class="ge-row-name"><div class="avatar al_dia">${initials(s.name)}</div>${s.name}</div>
+          <div class="ge-row-name"><div class="avatar al_dia">${initials(s.name)}</div>${esc(s.name)}</div>
           <button class="link-btn" onclick="groupEditRemove(${s.id})">${ICON_X} Quitar</button>
         </div>`).join("") : '<p class="muted small" style="padding:10px 2px;">El grupo no tiene integrantes.</p>'}
     </div>
     ${over ? `<p class="ge-note">Este grupo va a quedar con ${members.length} integrantes (el limite general es ${max}). Se permite igual.</p>` : ""}
 
     <p class="ge-label" style="margin-top:18px;">Sumar integrante</p>
-    <input type="text" id="ge-search" class="input-inline" style="width:100%; margin-bottom:8px;" placeholder="Buscar alumno..." value="${groupEdit.search.replace(/"/g, "&quot;")}">
+    <input type="text" id="ge-search" class="input-inline" style="width:100%; margin-bottom:8px;" placeholder="Buscar alumno..." value="${esc(groupEdit.search)}">
     <div class="ge-list ge-candidates">
       ${candidates.length ? candidates.map(s => {
         const gName = groupNameFor(s);
@@ -890,7 +902,7 @@ function renderGroupEditor() {
         <div class="ge-row">
           <div class="ge-row-name">
             <div class="avatar al_dia">${initials(s.name)}</div>
-            <div><div>${s.name}</div><div class="ge-row-sub">${gName ? `Esta en ${gName}` : "Sin grupo (individual)"}</div></div>
+            <div><div>${esc(s.name)}</div><div class="ge-row-sub">${gName ? `Esta en ${esc(gName)}` : "Sin grupo (individual)"}</div></div>
           </div>
           <button class="btn btn-small" onclick="groupEditAdd(${s.id})">+ ${gName ? "Mover aca" : "Agregar"}</button>
         </div>`;
@@ -967,8 +979,8 @@ function openProfile(id) {
     <div style="display:flex; align-items:center; gap:13px; margin-bottom:18px;">
       <div class="avatar ${s.status}" style="width:46px;height:46px;font-size:15px;">${initials(s.name)}</div>
       <div>
-        <p style="font-family: var(--font-display); font-weight:700; font-size:17px; margin:0;">${s.name}</p>
-        <p class="muted" style="margin:2px 0 0;">${s.group_name || "Individual"}</p>
+        <p style="font-family: var(--font-display); font-weight:700; font-size:17px; margin:0;">${esc(s.name)}</p>
+        <p class="muted" style="margin:2px 0 0;">${esc(s.group_name || "Individual")}</p>
       </div>
     </div>
     <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:9px; margin-bottom:18px;">
@@ -976,16 +988,17 @@ function openProfile(id) {
       <div class="stat-card"><p class="stat-label">Estado</p><p class="stat-value" style="font-size:15px;">${statusLabel(s.status)}</p></div>
       <div class="stat-card"><p class="stat-label">Estado TP</p><p class="stat-value" style="font-size:15px;">${tpStatusLabel(s)}</p></div>
     </div>
+    ${profileGradesHtml(s)}
     <p style="font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-secondary); margin: 0 0 9px;">Trabajos practicos</p>
     <div style="display:flex; flex-direction:column; gap:6px; margin-bottom:20px;">
       ${s.tps.length ? s.tps.map(t => `
         <div style="display:flex; justify-content:space-between; font-size:13.5px; padding:7px 0; border-bottom:1px solid var(--line);">
-          <span>${t.tp_name}</span>
+          <span>${esc(t.tp_name)}</span>
           <span class="${t.submitted ? "check-yes" : "check-no"}">${t.submitted ? "Entregado" : "Pendiente"}</span>
         </div>`).join("") : '<p class="muted small">Todavia no hay TPs cargados.</p>'}
     </div>
     <p style="font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-secondary); margin: 0 0 9px;">Observaciones</p>
-    <textarea id="notes-field" style="width:100%; min-height:76px; border:1px solid var(--line); border-radius:9px; padding:9px 11px; font-family: var(--font-body); font-size:13.5px; resize:vertical;">${s.notes || ""}</textarea>
+    <textarea id="notes-field" style="width:100%; min-height:76px; border:1px solid var(--line); border-radius:9px; padding:9px 11px; font-family: var(--font-body); font-size:13.5px; resize:vertical;">${esc(s.notes)}</textarea>
     <div style="display:flex; justify-content:flex-end; margin-top:11px;">
       <button class="btn btn-accent" onclick="saveNotes(${s.id})">Guardar</button>
     </div>
@@ -1009,6 +1022,304 @@ document.getElementById("modal-overlay").addEventListener("click", e => {
   if (e.target.id === "modal-overlay") closeModal();
 });
 
+// ---------- Notas ----------
+
+const EXAMS = [
+  { key: "p1", label: "1er parcial", short: "1er parcial", tema: true },
+  { key: "p2", label: "2do parcial", short: "2do parcial", tema: true },
+  { key: "pi", label: "Proyecto integrador", short: "Proyecto", tema: false },
+];
+
+function minPromo() {
+  const v = currentCourse().minPromo;
+  return typeof v === "number" ? v : 7;
+}
+
+function getGrade(exam, studentId) {
+  const g = currentCourse().grades && currentCourse().grades[exam];
+  return (g && g[studentId]) || null;
+}
+
+function setGrade(exam, studentId, patch) {
+  const course = currentCourse();
+  if (!course.grades) course.grades = {};
+  if (!course.grades[exam]) course.grades[exam] = {};
+  const merged = { ...(course.grades[exam][studentId] || {}), ...patch };
+  if (merged.nota == null && !merged.tema) delete course.grades[exam][studentId];
+  else course.grades[exam][studentId] = merged;
+}
+
+// null = vacia, undefined = invalida
+function parseNota(text) {
+  const t = String(text).trim().replace(",", ".");
+  if (t === "") return null;
+  const n = Number(t);
+  return Number.isFinite(n) && n >= 0 && n <= 10 ? n : undefined;
+}
+
+function fmtNota(n) {
+  if (n == null) return "";
+  return (Math.round(n * 100) / 100).toString().replace(".", ",");
+}
+
+function notaClass(n) {
+  if (n == null) return "";
+  return n >= 8 ? "hi" : n >= 6 ? "mid" : "low"; // mismos cortes de colores que la planilla
+}
+
+function notaClassOf(text) {
+  const n = parseNota(text);
+  return n == null ? "" : notaClass(n);
+}
+
+// Cruza notas con asistencia: una nota de alguien que nunca vino (o esta libre) no deberia promocionar.
+function gradeInfo(s) {
+  let clases = 0, presentes = 0;
+  Object.values(currentCourse().attendance).forEach(day => {
+    if (Object.prototype.hasOwnProperty.call(day, s.id)) {
+      clases++;
+      if (day[s.id] === true) presentes++;
+    }
+  });
+  const notas = {};
+  EXAMS.forEach(e => { const g = getGrade(e.key, s.id); notas[e.key] = g && g.nota != null ? g.nota : null; });
+  const cargadas = EXAMS.map(e => notas[e.key]).filter(n => n != null);
+  const promedio = cargadas.length ? cargadas.reduce((x, y) => x + y, 0) / cargadas.length : null;
+  const completo = cargadas.length === EXAMS.length;
+
+  let alerta = null;
+  if (cargadas.length) {
+    if (clases > 0 && presentes === 0) alerta = "Nunca asistio";
+    else if (s.status === "libre") alerta = `Libre por faltas (${s.faltas})`;
+  }
+
+  let situacion, pill;
+  if (alerta) { situacion = "Revisar: " + alerta.toLowerCase(); pill = "libre"; }
+  else if (s.status === "libre") { situacion = "Libre"; pill = "libre"; }
+  else if (completo) {
+    if (promedio >= minPromo()) { situacion = "Promociona"; pill = "al_dia"; }
+    else { situacion = "No promociona"; pill = "riesgo"; }
+  } else if (cargadas.length) { situacion = "En curso"; pill = "riesgo"; }
+  else { situacion = "Sin notas"; pill = ""; }
+
+  return { clases, presentes, notas, promedio, completo, alerta, situacion, pill };
+}
+
+function gradeSituationCells(gi) {
+  return {
+    prom: gi.promedio == null ? '<span class="muted">&mdash;</span>' : `<strong>${fmtNota(gi.promedio)}</strong>${gi.completo ? "" : ' <span class="muted small">parcial</span>'}`,
+    sit: `<span class="status-pill ${gi.pill}" ${gi.pill ? "" : 'style="background:var(--surface-2); color:var(--text-muted);"'}>${esc(gi.situacion)}</span>`,
+  };
+}
+
+function notasRows() {
+  const q = document.getElementById("search-notas").value.toLowerCase();
+  const filter = document.getElementById("notas-filter").value;
+  return studentsWithInfo()
+    .map(s => ({ s, gi: gradeInfo(s) }))
+    .filter(({ s }) => s.name.toLowerCase().includes(q))
+    .filter(({ gi }) => {
+      if (filter === "alerta") return !!gi.alerta;
+      if (filter === "promociona") return gi.situacion === "Promociona";
+      if (filter === "sin_nota") return !gi.completo;
+      return true;
+    });
+}
+
+function renderNotas() {
+  renderNotasSummary();
+  renderNotasTable();
+}
+
+// Alertas y tarjetas de arriba (se refrescan al cargar una nota sin repintar la tabla, para no perder el foco)
+function renderNotasSummary() {
+  document.getElementById("min-promo").value = minPromo();
+
+  const all = studentsWithInfo().map(s => ({ s, gi: gradeInfo(s) }));
+  const total = all.length;
+
+  const alertas = all.filter(x => x.gi.alerta);
+  const box = document.getElementById("notas-alertas");
+  box.innerHTML = alertas.length
+    ? `<div class="notas-alert"><strong>${alertas.length} alumno${alertas.length === 1 ? "" : "s"} con nota pero sin asistencia que la respalde</strong><ul>${alertas.map(({ s, gi }) =>
+        `<li>${esc(s.name)} &mdash; ${esc(gi.alerta)} (${EXAMS.filter(e => gi.notas[e.key] != null).map(e => `${e.short}: ${fmtNota(gi.notas[e.key])}`).join(", ")})</li>`).join("")}</ul></div>`
+    : (all.some(x => x.gi.promedio != null) ? '<div class="notas-alert ok"><strong>Sin alertas</strong>Todos los alumnos con nota tienen asistencia que la respalda.</div>' : "");
+
+  const p1 = all.map(x => x.gi.notas.p1).filter(n => n != null);
+  const avgP1 = p1.length ? p1.reduce((a, b) => a + b, 0) / p1.length : null;
+  const promocionan = all.filter(x => x.gi.situacion === "Promociona").length;
+  const completos = all.filter(x => x.gi.completo).length;
+  document.getElementById("notas-stats").innerHTML = `
+    <div class="stat-card" data-idx="01"><div><p class="stat-label">Alumnos</p><p class="stat-value">${total}</p></div></div>
+    <div class="stat-card" data-idx="02"><div><p class="stat-label">Promedio 1er parcial</p><p class="stat-value">${avgP1 == null ? "&mdash;" : fmtNota(avgP1)}</p></div></div>
+    <div class="stat-card success" data-idx="03"><div><p class="stat-label">Promocionan</p><p class="stat-value">${promocionan}</p><p class="stat-label" style="text-transform:none; margin:2px 0 0;">de ${completos} con todo cargado</p></div></div>
+    <div class="stat-card danger" data-idx="04"><div><p class="stat-label">Con alerta</p><p class="stat-value">${alertas.length}</p></div></div>
+  `;
+}
+
+function gradeCellHtml(s, exam) {
+  const g = getGrade(exam.key, s.id);
+  const nota = g && g.nota != null ? g.nota : null;
+  const tema = g && g.tema ? g.tema : "";
+  const temaSel = exam.tema ? `<select class="tema-select" title="Tema del examen" onchange="onTemaChange('${exam.key}', ${s.id}, this.value)">
+      ${["", "A", "B", "C", "D"].map(t => `<option value="${t}" ${t === tema ? "selected" : ""}>${t || "Tema"}</option>`).join("")}
+    </select>` : "";
+  return `<td class="text-center"><div class="nota-cell">${temaSel}
+    <input class="nota-input ${notaClass(nota)}" inputmode="decimal" value="${fmtNota(nota)}" placeholder="&mdash;" aria-label="${esc(exam.label)} de ${esc(s.name)}"
+      onchange="onNotaChange('${exam.key}', ${s.id}, this)" oninput="this.className='nota-input ' + notaClassOf(this.value)">
+  </div></td>`;
+}
+
+function renderNotasTable() {
+  const container = document.getElementById("table-notas");
+  if (!currentCourse().students.length) { container.innerHTML = emptyState("Todavia no cargaste alumnos. Anda a la seccion Alumnos para empezar."); return; }
+  const rows = notasRows();
+  if (!rows.length) { container.innerHTML = emptyState("No hay alumnos que coincidan con el filtro."); return; }
+
+  let html = `<table><thead><tr>
+    <th>Alumno</th><th class="text-center">Asistencia</th>
+    ${EXAMS.map(e => `<th class="text-center">${e.short}</th>`).join("")}
+    <th class="text-center">Promedio</th><th class="text-center">Situacion</th>
+  </tr></thead><tbody>`;
+  rows.forEach(({ s, gi }) => {
+    const cells = gradeSituationCells(gi);
+    html += `<tr id="nota-row-${s.id}" class="${gi.alerta ? "row-alerta" : ""}">
+      <td><div class="name-cell" onclick="openProfile(${s.id})"><div class="avatar ${s.status}">${initials(s.name)}</div>${esc(s.name)}</div></td>
+      <td class="text-center"><span class="asist-mini" title="Clases a las que vino / clases registradas">${gi.presentes}/${gi.clases}</span> <span class="status-pill ${s.status}">${s.faltas} falta${s.faltas === 1 ? "" : "s"}</span></td>
+      ${EXAMS.map(e => gradeCellHtml(s, e)).join("")}
+      <td class="text-center" data-role="prom">${cells.prom}</td>
+      <td class="text-center" data-role="sit">${cells.sit}</td>
+    </tr>`;
+  });
+  html += "</tbody></table>";
+  container.innerHTML = html;
+}
+
+// Refresca solo promedio/situacion de una fila (asi no se pierde el foco mientras se cargan notas)
+function refreshNotaRow(studentId) {
+  const s = studentsWithInfo().find(x => x.id === studentId);
+  const row = document.getElementById(`nota-row-${studentId}`);
+  if (!s || !row) return;
+  const gi = gradeInfo(s);
+  const cells = gradeSituationCells(gi);
+  row.querySelector('[data-role="prom"]').innerHTML = cells.prom;
+  row.querySelector('[data-role="sit"]').innerHTML = cells.sit;
+  row.classList.toggle("row-alerta", !!gi.alerta);
+}
+
+function onNotaChange(exam, studentId, el) {
+  const nota = parseNota(el.value);
+  if (nota === undefined) {
+    showToast("La nota tiene que ser un numero entre 0 y 10", "error");
+    const g = getGrade(exam, studentId);
+    const prev = g ? g.nota : null;
+    el.value = fmtNota(prev);
+    el.className = "nota-input " + notaClass(prev);
+    return;
+  }
+  setGrade(exam, studentId, { nota });
+  saveData();
+  el.value = fmtNota(nota);
+  refreshNotaRow(studentId);
+  renderNotasSummary();
+}
+
+function onTemaChange(exam, studentId, tema) {
+  setGrade(exam, studentId, { tema: tema || null });
+  saveData();
+}
+
+document.getElementById("search-notas").addEventListener("input", renderNotasTable);
+document.getElementById("notas-filter").addEventListener("change", renderNotasTable);
+document.getElementById("min-promo").addEventListener("change", e => {
+  const v = Number(String(e.target.value).replace(",", "."));
+  if (!Number.isFinite(v) || v < 1 || v > 10) { showToast("Elegi una nota entre 1 y 10", "error"); e.target.value = minPromo(); return; }
+  currentCourse().minPromo = v;
+  saveData();
+  renderNotas();
+});
+
+// --- Importacion de listas pegadas ---
+
+function normName(str) {
+  return String(str).normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z\s]/g, " ").split(/\s+/).filter(Boolean);
+}
+
+// Encuentra al alumno por nombre sin importar tildes ni el orden (Apellido Nombre / Nombre Apellido)
+function findStudentByName(name) {
+  const target = normName(name);
+  if (!target.length) return null;
+  const list = currentCourse().students.map(s => ({ s, tokens: normName(s.name) }));
+  const key = t => t.slice().sort().join(" ");
+  const exact = list.filter(x => key(x.tokens) === key(target));
+  if (exact.length === 1) return exact[0].s;
+  const subset = list.filter(x => target.every(t => x.tokens.includes(t)) || x.tokens.every(t => target.includes(t)));
+  return subset.length === 1 ? subset[0].s : null;
+}
+
+function parseGradeLines(text) {
+  const parsed = [], bad = [];
+  text.split("\n").map(l => l.trim()).filter(Boolean).forEach(line => {
+    const m = line.match(/^(.+?)\s+(?:tema\s*([A-Za-z])\s+)?(\d+(?:[.,]\d+)?)\s*$/i);
+    const nota = m ? parseNota(m[3]) : undefined;
+    if (!m || nota == null) { bad.push(line); return; }
+    parsed.push({ name: m[1].trim(), tema: m[2] ? m[2].toUpperCase() : null, nota });
+  });
+  return { parsed, bad };
+}
+
+document.getElementById("btn-import-notas").addEventListener("click", debounceClick(async () => {
+  const exam = document.getElementById("import-exam").value;
+  const { parsed, bad } = parseGradeLines(document.getElementById("notas-bulk").value);
+  if (!parsed.length) { showToast("No encontre filas con nombre y nota. Pega una por linea.", "error"); return; }
+
+  const unmatched = [];
+  let loaded = 0;
+  parsed.forEach(row => {
+    const student = findStudentByName(row.name);
+    if (!student) { unmatched.push(row); return; }
+    setGrade(exam, student.id, { nota: row.nota, ...(row.tema ? { tema: row.tema } : {}) });
+    loaded++;
+  });
+
+  let created = 0;
+  if (unmatched.length) {
+    const ok = await showConfirm(`No encontre en el curso a ${unmatched.length} alumno${unmatched.length === 1 ? "" : "s"}: ${unmatched.map(u => u.name).join(", ")}. Los agrego como alumnos nuevos con su nota?`, "Agregar");
+    if (ok) {
+      unmatched.forEach(row => {
+        if (nameTaken(currentCourse().students, row.name)) return;
+        const id = newId();
+        currentCourse().students.push({ id, name: row.name, groupId: null, notes: "" });
+        setGrade(exam, id, { nota: row.nota, ...(row.tema ? { tema: row.tema } : {}) });
+        created++;
+      });
+    }
+  }
+
+  saveData();
+  document.getElementById("notas-bulk").value = "";
+  renderNotas();
+  const skipped = unmatched.length - created;
+  showToast(`Notas cargadas: ${loaded}` + (created ? `, alumnos nuevos: ${created}` : "") + (skipped > 0 ? `, sin cargar: ${skipped}` : "") + (bad.length ? `, lineas ignoradas: ${bad.length}` : ""), "success");
+}));
+
+// Bloque de notas para la ficha del alumno
+function profileGradesHtml(s) {
+  const gi = gradeInfo(s);
+  const lines = EXAMS.map(e => {
+    const g = getGrade(e.key, s.id);
+    const tema = g && g.tema ? ` <span class="muted small">(Tema ${esc(g.tema)})</span>` : "";
+    return `<div class="grade-line"><span>${e.label}${tema}</span><strong>${gi.notas[e.key] == null ? '<span class="muted">sin cargar</span>' : fmtNota(gi.notas[e.key])}</strong></div>`;
+  }).join("");
+  return `
+    <p style="font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-secondary); margin: 0 0 9px;">Notas</p>
+    <div style="margin-bottom:8px;">${lines}
+      <div class="grade-line"><span>Promedio</span><strong>${gi.promedio == null ? "&mdash;" : fmtNota(gi.promedio)}</strong></div>
+      <div class="grade-line"><span>Asistio a</span><strong>${gi.presentes} de ${gi.clases} clases</strong></div>
+    </div>
+    <p style="margin:0 0 20px;"><span class="status-pill ${gi.pill}">${esc(gi.situacion)}</span></p>`;
+}
+
 // ---------- Cursos ----------
 
 function renderCourseSelect() {
@@ -1021,7 +1332,7 @@ function renderCourseDropdownList() {
   const dropdown = document.getElementById("course-dropdown");
   dropdown.innerHTML = data.courses.map(c => `
     <div class="course-dropdown-item ${c.id === data.currentCourseId ? "active" : ""}" onclick="selectCourseFromDropdown(${c.id})">
-      ${c.name}
+      ${esc(c.name)}
       ${c.id === data.currentCourseId ? ICON_CHECK : ""}
     </div>
   `).join("");
@@ -1108,8 +1419,8 @@ function renderCourseManagerList() {
   list.innerHTML = data.courses.map(c => `
     <div class="course-card">
       <div class="course-card-name-wrap">
-        <p class="course-card-name" id="course-name-display-${c.id}">${c.name}</p>
-        <input type="text" class="input-inline course-rename-input hidden" id="course-name-input-${c.id}" value="${c.name}" data-course-id="${c.id}">
+        <p class="course-card-name" id="course-name-display-${c.id}">${esc(c.name)}</p>
+        <input type="text" class="input-inline course-rename-input hidden" id="course-name-input-${c.id}" value="${esc(c.name)}" data-course-id="${c.id}">
       </div>
       <div class="course-card-actions">
         <button class="icon-btn" title="Renombrar curso" onclick="startRenameCourse(${c.id})">${ICON_PENCIL}</button>
