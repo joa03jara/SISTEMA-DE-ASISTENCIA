@@ -60,6 +60,7 @@
       <button class="nav-item" data-view="alumnos" title="Alumnos"><span class="nav-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c0-3.6 3.1-6.5 7-6.5s7 2.9 7 6.5"/></svg></span> Alumnos</button>
       <button class="nav-item" data-view="asistencia" title="Asistencia"><span class="nav-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="16" rx="2"/><line x1="3.5" y1="9.5" x2="20.5" y2="9.5"/><line x1="7.5" y1="2.8" x2="7.5" y2="6.2"/><line x1="16.5" y1="2.8" x2="16.5" y2="6.2"/><path d="M8 14l2.3 2.3L16 11"/></svg></span> Asistencia</button>
       <button class="nav-item" data-view="tps" title="Trabajos practicos"><span class="nav-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5h8l4 4v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-16a1 1 0 0 1 1-1z"/><path d="M14 3.5v4h4"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="16.5" x2="16" y2="16.5"/></svg></span> Trabajos practicos</button>
+      <button class="nav-item" data-view="notas" title="Notas"><span class="nav-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5l2.6 5.3 5.9.9-4.25 4.1 1 5.8L12 16.9l-5.25 2.7 1-5.8L3.5 9.7l5.900-.9L12 3.5z"/></svg></span> Notas</button>
       <button class="nav-item" data-view="grupos" title="Grupos"><span class="nav-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9.5" r="2.4"/><path d="M3.5 20c0-3.2 2.5-5.8 5.5-5.8s5.5 2.6 5.5 5.8"/><path d="M15.5 14.6c2.4.2 4.3 2.4 4.3 5"/></svg></span> Grupos</button>
     </nav>
 
@@ -160,6 +161,47 @@
       </div>
     </section>
 
+    <section id="view-notas" class="view hidden">
+      <div id="notas-alertas"></div>
+      <div class="stat-grid" id="notas-stats"></div>
+
+      <details class="card notas-import" style="margin-bottom: 16px;">
+        <summary class="card-head"><h2>Importar notas pegando una lista</h2></summary>
+        <div style="padding: 16px 20px;">
+          <p class="muted small" style="margin: 0 0 10px;">Pega las filas tal cual (nombre, tema y nota; podes copiarlas de una planilla o del PDF). Busco a cada alumno por nombre, sin importar tildes ni el orden de nombre y apellido.</p>
+          <div style="display:flex; gap:9px; align-items:center; margin-bottom:10px; flex-wrap:wrap;">
+            <label class="group-size-picker"><span>Cargar en</span>
+              <select id="import-exam"><option value="p1">1er parcial</option><option value="p2">2do parcial</option><option value="pi">Proyecto integrador</option></select>
+            </label>
+          </div>
+          <textarea id="notas-bulk" class="bulk-textarea" placeholder="Casarino Julián Antonio   Tema A   8&#10;Romero Ruth   Tema A   9,50&#10;..."></textarea>
+          <div style="display:flex; justify-content:flex-end; margin-top:10px;">
+            <button class="btn btn-accent" id="btn-import-notas">Importar notas</button>
+          </div>
+        </div>
+      </details>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>Notas del curso</h2>
+          <div class="card-head-actions">
+            <label class="group-size-picker" title="Promedio minimo para promocionar">
+              <span>Promociona con</span>
+              <input type="number" id="min-promo" min="1" max="10" step="0.5" class="input-inline" style="width:70px; padding:6px 8px;">
+            </label>
+            <select id="notas-filter" class="input-inline" style="padding:9px 10px;">
+              <option value="todos">Todos</option>
+              <option value="alerta">Con alerta</option>
+              <option value="promociona">Promocionan</option>
+              <option value="sin_nota">Faltan notas</option>
+            </select>
+            <div class="search-box"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text-muted); flex-shrink:0;"><circle cx="10.5" cy="10.5" r="6"/><line x1="15" y1="15" x2="20" y2="20"/></svg><input type="text" id="search-notas" placeholder="Buscar alumno..."></div>
+          </div>
+        </div>
+        <div class="table-wrap" id="table-notas"></div>
+      </div>
+    </section>
+
     <section id="view-grupos" class="view hidden">
       <div class="card">
         <div class="card-head">
@@ -214,8 +256,22 @@
 <script src="app.js"></script>
 <script>
   if ("serviceWorker" in navigator) {
+    const hadController = !!navigator.serviceWorker.controller;
+    let reloaded = false;
+    // Cuando se instala una version nueva de la app, recarga sola para mostrarla
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (!hadController || reloaded) return;
+      reloaded = true;
+      window.location.reload();
+    });
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("sw.js").catch(() => {});
+      navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).then(reg => {
+        reg.update().catch(() => {});
+        // Cada vez que volves a abrir la app (tablet que queda en segundo plano), busca actualizaciones
+        document.addEventListener("visibilitychange", () => {
+          if (document.visibilityState === "visible") reg.update().catch(() => {});
+        });
+      }).catch(() => {});
     });
   }
 </script>
