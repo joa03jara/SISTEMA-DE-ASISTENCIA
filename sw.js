@@ -1,4 +1,4 @@
-const CACHE_NAME = "registro-curso-v5";
+const CACHE_NAME = "registro-curso-v6";
 const ASSETS = [
   "./",
   "./index.html",
@@ -34,7 +34,7 @@ self.addEventListener("activate", (event) => {
 // Si no hay conexion (aula sin wifi), usa la copia guardada.
 self.addEventListener("fetch", (event) => {
   event.respondWith(
-    fetch(event.request)
+    fetch(event.request, { cache: "no-cache" }) // no-cache: siempre revalida con el servidor, sin usar la copia del navegador
       .then((response) => {
         const copy = response.clone();
         caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));

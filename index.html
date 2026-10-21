@@ -256,8 +256,22 @@
 <script src="app.js"></script>
 <script>
   if ("serviceWorker" in navigator) {
+    const hadController = !!navigator.serviceWorker.controller;
+    let reloaded = false;
+    // Cuando se instala una version nueva de la app, recarga sola para mostrarla
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (!hadController || reloaded) return;
+      reloaded = true;
+      window.location.reload();
+    });
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("sw.js").catch(() => {});
+      navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).then(reg => {
+        reg.update().catch(() => {});
+        // Cada vez que volves a abrir la app (tablet que queda en segundo plano), busca actualizaciones
+        document.addEventListener("visibilitychange", () => {
+          if (document.visibilityState === "visible") reg.update().catch(() => {});
+        });
+      }).catch(() => {});
     });
   }
 </script>
