@@ -385,11 +385,14 @@ function renderPanel() {
 }
 
 // El Panel es solo un resumen: muestra a quien hay que mirar hoy. El detalle vive en cada seccion.
+const ATTENTION_MAX = 8;
+
 function attentionCard(title, hint, items, rowHtml) {
   return `<div class="card attention-card">
     <div class="card-head"><h2>${title}</h2><span class="muted small">${items.length ? items.length : "Todo en orden"}</span></div>
     <p class="muted small" style="padding: 10px 20px 0;">${hint}</p>
-    <div class="attention-list">${items.length ? items.map(rowHtml).join("") : '<p class="muted small" style="padding: 10px 2px;">Nada para revisar.</p>'}</div>
+    <div class="attention-list">${items.length ? items.slice(0, ATTENTION_MAX).map(rowHtml).join("") : '<p class="muted small" style="padding: 10px 2px;">Nada para revisar.</p>'}
+      ${items.length > ATTENTION_MAX ? `<p class="muted small" style="padding: 10px 8px 2px;">y ${items.length - ATTENTION_MAX} mas...</p>` : ""}</div>
   </div>`;
 }
 
