@@ -323,11 +323,11 @@ document.getElementById("hamburger-btn").addEventListener("click", openMobileMen
 document.getElementById("sidebar-backdrop").addEventListener("click", closeMobileMenu);
 
 const titles = {
-  panel: ["Panel del curso", "Vista general de asistencia y trabajos practicos"],
-  alumnos: ["Alumnos", "Cargar y administrar el listado del curso"],
-  asistencia: ["Tomar asistencia", "Se guarda por fecha, miercoles y viernes"],
+  panel: ["Resumen del curso", "A quien tenes que prestarle atencion hoy"],
+  alumnos: ["Alumnos", "Listado del curso: agregar, ver grupo y eliminar"],
+  asistencia: ["Asistencia", "Tomar lista por fecha y ver el historial"],
   tps: ["Trabajos practicos", "Marca entregas por grupo o individuales"],
-  notas: ["Notas", "Parciales, proyecto integrador y control de asistencia"],
+  notas: ["Notas", "Cargar parciales y proyecto integrador"],
   grupos: ["Grupos", "Arma y edita los grupos del curso"],
 };
 
@@ -384,51 +384,51 @@ function renderPanel() {
   renderPanelTable(students);
 }
 
-function renderPanelTable(students) {
-  const tpNames = currentCourse().tps.map(t => t.name);
-  let html = `<table><thead><tr>
-    <th>Alumno</th><th>Grupo</th><th class="text-center">Faltas</th>
-    ${tpNames.map(n => `<th class="text-center">${esc(n)}</th>`).join("")}
-    <th class="text-center">Estado</th><th class="text-center">Estado TP</th>
-    ${EXAMS.map(e => `<th class="text-center">${e.short}</th>`).join("")}
-    <th class="text-center">Promedio</th>
-  </tr></thead><tbody>`;
-  students.forEach(s => {
-    const gi = gradeInfo(s);
-    html += `<tr id="nota-row-${s.id}" class="${gi.alerta ? "row-alerta" : ""}" ${gi.alerta ? `title="${esc(gi.alerta)}: tiene nota cargada"` : ""}>
-      <td><div class="name-cell" onclick="openProfile(${s.id})"><div class="avatar ${s.status}">${initials(s.name)}</div>${esc(s.name)}</div></td>
-      <td>${esc(s.group_name || "Individual")}</td>
-      <td class="text-center faltas-count">${s.faltas}</td>
-      ${s.tps.map(t => `<td class="text-center">${t.submitted ? `<span class="check-yes">${ICON_CHECK}</span>` : `<span class="check-no">${ICON_X}</span>`}</td>`).join("")}
-      <td class="text-center"><span class="status-pill ${s.status}">${statusLabel(s.status)}</span></td>
-      <td class="text-center">${tpPill(s)}</td>
-      ${EXAMS.map(e => gradeCellHtml(s, e, false)).join("")}
-      <td class="text-center" data-role="prom">${gradeSituationCells(gi).prom}</td>
-    </tr>`;
-  });
-  html += "</tbody></table>";
-  document.getElementById("table-panel").innerHTML = students.length ? html : emptyState("Todavia no cargaste alumnos. Anda a la seccion Alumnos para empezar.");
+// El Panel es solo un resumen: muestra a quien hay que mirar hoy. El detalle vive en cada seccion.
+const ATTENTION_MAX = 8;
+
+function attentionCard(title, hint, items, rowHtml) {
+  return `<div class="card attention-card">
+    <div class="card-head"><h2>${title}</h2><span class="muted small">${items.length ? items.length : "Todo en orden"}</span></div>
+    <p class="muted small" style="padding: 10px 20px 0;">${hint}</p>
+    <div class="attention-list">${items.length ? items.slice(0, ATTENTION_MAX).map(rowHtml).join("") : '<p class="muted small" style="padding: 10px 2px;">Nada para revisar.</p>'}
+      ${items.length > ATTENTION_MAX ? `<p class="muted small" style="padding: 10px 8px 2px;">y ${items.length - ATTENTION_MAX} mas...</p>` : ""}</div>
+  </div>`;
 }
 
-document.getElementById("search-panel").addEventListener("input", e => {
-  const q = e.target.value.toLowerCase();
-  renderPanelTable(studentsWithInfo().filter(s => s.name.toLowerCase().includes(q)));
-});
+function renderPanelTable(students) {
+  const box = document.getElementById("panel-attention");
+  if (!students.length) { box.innerHTML = emptyState("Todavia no cargaste alumnos. Anda a la seccion Alumnos para empezar."); return; }
+
+  const row = (s, right) => `<div class="attention-row" onclick="openProfile(${s.id})">
+    <div class="name-cell"><div class="avatar ${s.status}">${initials(s.name)}</div>${esc(s.name)}</div>
+    <div>${right}</div></div>`;
+
+  const porFaltas = students.filter(s => s.status !== "al_dia").sort((x, y) => y.faltas - x.faltas);
+  const conAlerta = students.map(s => ({ s, gi: gradeInfo(s) })).filter(x => x.gi.alerta);
+  const tpsPend = students.filter(s => s.tpTotal > 0 && s.tpStatus !== "al_dia").sort((x, y) => (x.tpDone - x.tpTotal) - (y.tpDone - y.tpTotal));
+
+  box.innerHTML = `<div class="attention-grid">
+    ${attentionCard("Faltas", `Alumnos en riesgo o libres (limite: ${LIMITE_FALTAS} faltas). Se cargan en Asistencia.`, porFaltas,
+      s => row(s, `<span class="status-pill ${s.status}">${s.faltas} falta${s.faltas === 1 ? "" : "s"} &middot; ${statusLabel(s.status)}</span>`))}
+    ${attentionCard("Notas a revisar", "Tienen nota cargada pero no asistieron o estan libres. Se cargan en Notas.", conAlerta,
+      ({ s, gi }) => row(s, `<span class="status-pill libre">${esc(gi.alerta)}</span>`))}
+    ${attentionCard("Trabajos practicos", "Alumnos que deben algun TP. Se marcan en Trabajos practicos.", tpsPend,
+      s => row(s, tpPill(s)))}
+  </div>`;
+}
 
 // ---------- Alumnos ----------
 
 function renderStudentsTable() {
   const students = studentsWithInfo();
   let html = `<table><thead><tr>
-    <th>Alumno</th><th>Grupo</th><th class="text-center">Faltas</th><th class="text-center">Estado</th><th class="text-center">Estado TP</th><th></th>
+    <th>Alumno</th><th>Grupo</th><th></th>
   </tr></thead><tbody>`;
   students.forEach(s => {
     html += `<tr>
       <td><div class="name-cell" onclick="openProfile(${s.id})"><div class="avatar ${s.status}">${initials(s.name)}</div>${esc(s.name)}</div></td>
       <td>${esc(s.group_name || "Individual")}</td>
-      <td class="text-center faltas-count">${s.faltas}</td>
-      <td class="text-center"><span class="status-pill ${s.status}">${statusLabel(s.status)}</span></td>
-      <td class="text-center">${tpPill(s)}</td>
       <td class="text-center"><button class="link-btn" onclick="deleteStudent(${s.id})">${ICON_TRASH} Eliminar</button></td>
     </tr>`;
   });
@@ -1162,17 +1162,40 @@ function renderNotasSummary() {
   `;
 }
 
-function gradeCellHtml(s, exam, withTema = true) {
+function gradeInputHtml(s, exam, withTema = true) {
   const g = getGrade(exam.key, s.id);
   const nota = g && g.nota != null ? g.nota : null;
   const tema = g && g.tema ? g.tema : "";
   const temaSel = exam.tema && withTema ? `<select class="tema-select" title="Tema del examen" onchange="onTemaChange('${exam.key}', ${s.id}, this.value)">
       ${["", "A", "B", "C", "D"].map(t => `<option value="${t}" ${t === tema ? "selected" : ""}>${t || "Tema"}</option>`).join("")}
     </select>` : "";
-  return `<td class="text-center"><div class="nota-cell">${temaSel}
+  return `<div class="nota-cell">${temaSel}
     <input class="nota-input ${notaClass(nota)}" inputmode="decimal" value="${fmtNota(nota)}" placeholder="&mdash;" aria-label="${esc(exam.label)} de ${esc(s.name)}"
       onchange="onNotaChange('${exam.key}', ${s.id}, this)" oninput="this.className='nota-input ' + notaClassOf(this.value)">
-  </div></td>`;
+  </div>`;
+}
+
+function gradeCellHtml(s, exam, withTema = true) {
+  return `<td class="text-center">${gradeInputHtml(s, exam, withTema)}</td>`;
+}
+
+// En tablet y celular cada alumno es una tarjeta (la tabla no entra); en PC sigue la tabla
+const notasCompact = window.matchMedia("(max-width: 900px)");
+notasCompact.addEventListener("change", () => { if (view === "notas") renderNotasTable(); });
+
+function notaCardHtml(s, gi) {
+  const cells = gradeSituationCells(gi);
+  return `<div class="nota-card ${gi.alerta ? "row-alerta" : ""}" id="nota-row-${s.id}">
+    <div class="nota-card-head">
+      <div class="name-cell" onclick="openProfile(${s.id})"><div class="avatar ${s.status}">${initials(s.name)}</div>${esc(s.name)}</div>
+      <span data-role="sit">${cells.sit}</span>
+    </div>
+    <p class="nota-card-sub"><span class="asist-mini">Vino ${gi.presentes}/${gi.clases}</span> <span class="status-pill ${s.status}">${s.faltas} falta${s.faltas === 1 ? "" : "s"}</span></p>
+    <div class="nota-card-grid">
+      ${EXAMS.map(e => `<div class="nota-card-exam"><p class="nota-card-label">${e.short}</p>${gradeInputHtml(s, e)}</div>`).join("")}
+    </div>
+    <p class="nota-card-prom">Promedio: <span data-role="prom">${cells.prom}</span></p>
+  </div>`;
 }
 
 function renderNotasTable() {
@@ -1180,6 +1203,11 @@ function renderNotasTable() {
   if (!currentCourse().students.length) { container.innerHTML = emptyState("Todavia no cargaste alumnos. Anda a la seccion Alumnos para empezar."); return; }
   const rows = notasRows();
   if (!rows.length) { container.innerHTML = emptyState("No hay alumnos que coincidan con el filtro."); return; }
+
+  if (notasCompact.matches) {
+    container.innerHTML = `<div class="nota-cards">${rows.map(({ s, gi }) => notaCardHtml(s, gi)).join("")}</div>`;
+    return;
+  }
 
   let html = `<table><thead><tr>
     <th>Alumno</th><th class="text-center">Asistencia</th>
