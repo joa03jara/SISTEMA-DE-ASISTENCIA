@@ -1162,17 +1162,40 @@ function renderNotasSummary() {
   `;
 }
 
-function gradeCellHtml(s, exam, withTema = true) {
+function gradeInputHtml(s, exam, withTema = true) {
   const g = getGrade(exam.key, s.id);
   const nota = g && g.nota != null ? g.nota : null;
   const tema = g && g.tema ? g.tema : "";
   const temaSel = exam.tema && withTema ? `<select class="tema-select" title="Tema del examen" onchange="onTemaChange('${exam.key}', ${s.id}, this.value)">
       ${["", "A", "B", "C", "D"].map(t => `<option value="${t}" ${t === tema ? "selected" : ""}>${t || "Tema"}</option>`).join("")}
     </select>` : "";
-  return `<td class="text-center"><div class="nota-cell">${temaSel}
+  return `<div class="nota-cell">${temaSel}
     <input class="nota-input ${notaClass(nota)}" inputmode="decimal" value="${fmtNota(nota)}" placeholder="&mdash;" aria-label="${esc(exam.label)} de ${esc(s.name)}"
       onchange="onNotaChange('${exam.key}', ${s.id}, this)" oninput="this.className='nota-input ' + notaClassOf(this.value)">
-  </div></td>`;
+  </div>`;
+}
+
+function gradeCellHtml(s, exam, withTema = true) {
+  return `<td class="text-center">${gradeInputHtml(s, exam, withTema)}</td>`;
+}
+
+// En tablet y celular cada alumno es una tarjeta (la tabla no entra); en PC sigue la tabla
+const notasCompact = window.matchMedia("(max-width: 900px)");
+notasCompact.addEventListener("change", () => { if (view === "notas") renderNotasTable(); });
+
+function notaCardHtml(s, gi) {
+  const cells = gradeSituationCells(gi);
+  return `<div class="nota-card ${gi.alerta ? "row-alerta" : ""}" id="nota-row-${s.id}">
+    <div class="nota-card-head">
+      <div class="name-cell" onclick="openProfile(${s.id})"><div class="avatar ${s.status}">${initials(s.name)}</div>${esc(s.name)}</div>
+      <span data-role="sit">${cells.sit}</span>
+    </div>
+    <p class="nota-card-sub"><span class="asist-mini">Vino ${gi.presentes}/${gi.clases}</span> <span class="status-pill ${s.status}">${s.faltas} falta${s.faltas === 1 ? "" : "s"}</span></p>
+    <div class="nota-card-grid">
+      ${EXAMS.map(e => `<div class="nota-card-exam"><p class="nota-card-label">${e.short}</p>${gradeInputHtml(s, e)}</div>`).join("")}
+    </div>
+    <p class="nota-card-prom">Promedio: <span data-role="prom">${cells.prom}</span></p>
+  </div>`;
 }
 
 function renderNotasTable() {
@@ -1180,6 +1203,11 @@ function renderNotasTable() {
   if (!currentCourse().students.length) { container.innerHTML = emptyState("Todavia no cargaste alumnos. Anda a la seccion Alumnos para empezar."); return; }
   const rows = notasRows();
   if (!rows.length) { container.innerHTML = emptyState("No hay alumnos que coincidan con el filtro."); return; }
+
+  if (notasCompact.matches) {
+    container.innerHTML = `<div class="nota-cards">${rows.map(({ s, gi }) => notaCardHtml(s, gi)).join("")}</div>`;
+    return;
+  }
 
   let html = `<table><thead><tr>
     <th>Alumno</th><th class="text-center">Asistencia</th>

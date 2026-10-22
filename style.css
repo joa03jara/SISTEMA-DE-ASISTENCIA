@@ -677,3 +677,18 @@
   .attention-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 9px 8px; border-bottom: 1px solid var(--line); cursor: pointer; border-radius: 8px; }
   .attention-row:last-child { border-bottom: none; }
   .attention-row:hover { background: var(--paper); }
+
+  /* Notas en tarjetas (tablet y celular) */
+  .nota-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; padding: 14px; }
+  .nota-card { background: var(--paper-raised); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; }
+  .nota-card.row-alerta { background: var(--coral-light); border-color: #f1b9b5; }
+  .nota-card-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .nota-card-sub { margin: 8px 0 10px; font-size: 12.5px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .nota-card-alerta { color: var(--coral-dark); font-weight: 700; }
+  .nota-card-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .nota-card-exam { text-align: center; }
+  .nota-card-label { margin: 0 0 5px; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); font-weight: 700; }
+  .nota-card-exam .nota-cell { flex-direction: column; gap: 6px; justify-content: flex-end; min-height: 92px; }
+  .nota-card-exam .nota-input { width: 100%; max-width: 90px; padding: 10px 4px; font-size: 16px; }
+  .nota-card-exam .tema-select { width: 100%; max-width: 90px; padding: 7px 2px; }
+  .nota-card-prom { margin: 10px 0 0; font-size: 13px; color: var(--text-secondary); text-align: right; }
