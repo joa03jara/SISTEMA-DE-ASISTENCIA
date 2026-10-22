@@ -56,7 +56,7 @@
     </div>
 
     <nav class="nav">
-      <button class="nav-item active" data-view="panel" title="Panel"><span class="nav-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="7" height="7" rx="1.3"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.3"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.3"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.3"/></svg></span> Panel</button>
+      <button class="nav-item active" data-view="panel" title="Panel"><span class="nav-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="7" height="7" rx="1.3"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.3"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.3"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.3"/></svg></span> Resumen</button>
       <button class="nav-item" data-view="alumnos" title="Alumnos"><span class="nav-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c0-3.6 3.1-6.5 7-6.5s7 2.9 7 6.5"/></svg></span> Alumnos</button>
       <button class="nav-item" data-view="asistencia" title="Asistencia"><span class="nav-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="16" rx="2"/><line x1="3.5" y1="9.5" x2="20.5" y2="9.5"/><line x1="7.5" y1="2.8" x2="7.5" y2="6.2"/><line x1="16.5" y1="2.8" x2="16.5" y2="6.2"/><path d="M8 14l2.3 2.3L16 11"/></svg></span> Asistencia</button>
       <button class="nav-item" data-view="tps" title="Trabajos practicos"><span class="nav-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5h8l4 4v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-16a1 1 0 0 1 1-1z"/><path d="M14 3.5v4h4"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="16.5" x2="16" y2="16.5"/></svg></span> Trabajos practicos</button>
@@ -89,13 +89,7 @@
 
     <section id="view-panel" class="view">
       <div class="stat-grid" id="stat-grid"></div>
-      <div class="card">
-        <div class="card-head">
-          <h2>Alumnos del curso</h2>
-          <div class="search-box"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text-muted); flex-shrink:0;"><circle cx="10.5" cy="10.5" r="6.5"/><line x1="15.5" y1="15.5" x2="20.5" y2="20.5"/></svg><input type="text" id="search-panel" placeholder="Buscar alumno..."></div>
-        </div>
-        <div class="table-wrap" id="table-panel"></div>
-      </div>
+      <div id="panel-attention"></div>
     </section>
 
     <section id="view-alumnos" class="view hidden">

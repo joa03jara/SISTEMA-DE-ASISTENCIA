@@ -671,3 +671,9 @@
   #table-notas td, #table-notas th { padding: 9px 10px; }
   #table-notas .name-cell { white-space: nowrap; }
   .nota-input { width: 54px; }
+
+  .attention-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; align-items: start; }
+  .attention-list { padding: 6px 12px 12px; }
+  .attention-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 9px 8px; border-bottom: 1px solid var(--line); cursor: pointer; border-radius: 8px; }
+  .attention-row:last-child { border-bottom: none; }
+  .attention-row:hover { background: var(--paper); }
