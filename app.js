@@ -396,6 +396,17 @@ function attentionCard(title, hint, items, rowHtml) {
   </div>`;
 }
 
+// Cuantas clases del curso tiene registradas cada alumno. Los que se sumaron despues arrancan con registro tarde.
+function attendanceCoverage(studentId) {
+  const att = currentCourse().attendance;
+  const dates = Object.keys(att).sort();
+  const registered = dates.filter(d => Object.prototype.hasOwnProperty.call(att[d], studentId));
+  const first = registered[0] || null;
+  const missingBefore = first ? dates.filter(d => d < first).length : dates.length;
+  const missingAfter = first ? dates.filter(d => d > first && !registered.includes(d)).length : 0;
+  return { total: dates.length, registered: registered.length, first, missingBefore, missingAfter, missing: dates.length - registered.length };
+}
+
 function renderPanelTable(students) {
   const box = document.getElementById("panel-attention");
   if (!students.length) { box.innerHTML = emptyState("Todavia no cargaste alumnos. Anda a la seccion Alumnos para empezar."); return; }
@@ -406,6 +417,8 @@ function renderPanelTable(students) {
 
   const porFaltas = students.filter(s => s.status !== "al_dia").sort((x, y) => y.faltas - x.faltas);
   const conAlerta = students.map(s => ({ s, gi: gradeInfo(s) })).filter(x => x.gi.alerta);
+  const dates = Object.keys(currentCourse().attendance).sort();
+  const sinRegistro = students.map(s => ({ s, cov: attendanceCoverage(s.id) })).filter(x => x.cov.missing > 0).sort((x, y) => y.cov.missing - x.cov.missing);
   const tpsPend = students.filter(s => s.tpTotal > 0 && s.tpStatus !== "al_dia").sort((x, y) => (x.tpDone - x.tpTotal) - (y.tpDone - y.tpTotal));
 
   box.innerHTML = `<div class="attention-grid">
@@ -413,6 +426,10 @@ function renderPanelTable(students) {
       s => row(s, `<span class="status-pill ${s.status}">${s.faltas} falta${s.faltas === 1 ? "" : "s"} &middot; ${statusLabel(s.status)}</span>`))}
     ${attentionCard("Notas a revisar", "Tienen nota cargada pero no asistieron o estan libres. Se cargan en Notas.", conAlerta,
       ({ s, gi }) => row(s, `<span class="status-pill libre">${esc(gi.alerta)}</span>`))}
+    ${attentionCard("Asistencia incompleta", dates.length ? `Primera clase registrada: ${formatDateShort(dates[0])} (${dates.length} clases en total). Estos alumnos no tienen asistencia en todas; seguramente los agregaste despues.` : "Todavia no tomaste asistencia.", sinRegistro,
+      ({ s, cov }) => row(s, cov.first && cov.missingAfter === 0
+        ? `<span class="status-pill riesgo" title="No tiene registro de las ${cov.missingBefore} clases anteriores">Desde ${formatDateShort(cov.first)} &middot; ${cov.registered}/${cov.total}</span>`
+        : `<span class="status-pill riesgo">Sin marcar ${cov.missing} de ${cov.total}</span>`))}
     ${attentionCard("Trabajos practicos", "Alumnos que deben algun TP. Se marcan en Trabajos practicos.", tpsPend,
       s => row(s, tpPill(s)))}
   </div>`;
