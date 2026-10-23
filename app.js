@@ -389,7 +389,7 @@ const ATTENTION_MAX = 8;
 
 function attentionCard(title, hint, items, rowHtml) {
   return `<div class="card attention-card">
-    <div class="card-head"><h2>${title}</h2><span class="muted small">${items.length ? items.length : "Todo en orden"}</span></div>
+    <div class="card-head attention-head"><h2>${title}</h2><span class="attention-count ${items.length ? "" : "ok"}">${items.length ? items.length : "Todo en orden"}</span></div>
     <p class="muted small" style="padding: 10px 20px 0;">${hint}</p>
     <div class="attention-list">${items.length ? items.slice(0, ATTENTION_MAX).map(rowHtml).join("") : '<p class="muted small" style="padding: 10px 2px;">Nada para revisar.</p>'}
       ${items.length > ATTENTION_MAX ? `<p class="muted small" style="padding: 10px 8px 2px;">y ${items.length - ATTENTION_MAX} mas...</p>` : ""}</div>
@@ -988,10 +988,10 @@ function openProfile(id) {
         <p class="muted" style="margin:2px 0 0;">${esc(s.group_name || "Individual")}</p>
       </div>
     </div>
-    <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:9px; margin-bottom:18px;">
-      <div class="stat-card"><p class="stat-label">Faltas</p><p class="stat-value">${s.faltas} / ${LIMITE_FALTAS}</p></div>
-      <div class="stat-card"><p class="stat-label">Estado</p><p class="stat-value" style="font-size:15px;">${statusLabel(s.status)}</p></div>
-      <div class="stat-card"><p class="stat-label">Estado TP</p><p class="stat-value" style="font-size:15px;">${tpStatusLabel(s)}</p></div>
+    <div class="mini-stats">
+      <div class="mini-stat"><p class="mini-stat-label">Faltas</p><p class="mini-stat-value">${s.faltas} de ${LIMITE_FALTAS}</p></div>
+      <div class="mini-stat"><p class="mini-stat-label">Estado</p><p class="mini-stat-value"><span class="status-pill ${s.status}">${statusLabel(s.status)}</span></p></div>
+      <div class="mini-stat"><p class="mini-stat-label">Estado TP</p><p class="mini-stat-value"><span class="status-pill ${tpPillClass(s)}">${esc(tpStatusLabel(s))}</span></p></div>
     </div>
     ${profileGradesHtml(s)}
     <p style="font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-secondary); margin: 0 0 9px;">Trabajos practicos</p>
@@ -1350,8 +1350,9 @@ function profileGradesHtml(s) {
     <div style="margin-bottom:8px;">${lines}
       <div class="grade-line"><span>Promedio</span><strong>${gi.promedio == null ? "&mdash;" : fmtNota(gi.promedio)}</strong></div>
       <div class="grade-line"><span>Asistio a</span><strong>${gi.presentes} de ${gi.clases} clases</strong></div>
+      <div class="grade-line" style="border-bottom:none;"><span>Situacion</span><span class="status-pill ${gi.pill}" ${gi.pill ? "" : 'style="background:var(--surface-2); color:var(--text-muted);"'}>${esc(gi.situacion)}</span></div>
     </div>
-    <p style="margin:0 0 20px;"><span class="status-pill ${gi.pill}">${esc(gi.situacion)}</span></p>`;
+    <div style="height:14px;"></div>`;
 }
 
 // ---------- Cursos ----------

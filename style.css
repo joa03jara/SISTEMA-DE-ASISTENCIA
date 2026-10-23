@@ -692,3 +692,13 @@
   .nota-card-exam .nota-input { width: 100%; max-width: 90px; padding: 10px 4px; font-size: 16px; }
   .nota-card-exam .tema-select { width: 100%; max-width: 90px; padding: 7px 2px; }
   .nota-card-prom { margin: 10px 0 0; font-size: 13px; color: var(--text-secondary); text-align: right; }
+
+  .mini-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(105px, 1fr)); gap: 9px; margin-bottom: 18px; }
+  .mini-stat { background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
+  .mini-stat-label { margin: 0 0 6px; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); font-weight: 700; }
+  .mini-stat-value { margin: 0; font-family: var(--font-display); font-size: 16px; font-weight: 700; color: var(--text-primary); }
+  .mini-stat-value .status-pill { font-size: 12px; white-space: normal; }
+  .card-head.attention-head { flex-direction: row; align-items: center; justify-content: space-between; flex-wrap: nowrap; }
+  .attention-count { background: var(--surface-2); color: var(--text-secondary); border-radius: 20px; padding: 3px 11px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+  .attention-count.ok { background: var(--success-light); color: var(--success-dark); }
+  @media (max-width: 600px) { .stat-card::before { display: none; } }
