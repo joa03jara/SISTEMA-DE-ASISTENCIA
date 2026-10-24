@@ -18,7 +18,7 @@ const db = firebase.firestore();
 db.enablePersistence({ synchronizeTabs: true }).catch(() => { /* ya estaba habilitado o el navegador no lo soporta */ });
 
 function emptyCourseData() {
-  return { students: [], groups: [], attendance: {}, tps: [], submissions: {}, maxGroupSize: 4, grades: {}, minPromo: 7 };
+  return { students: [], groups: [], attendance: {}, tps: [], submissions: {}, maxGroupSize: 4, grades: {} };
 }
 
 function defaultData() {
@@ -1061,10 +1061,23 @@ const CUENTAN = [
   { key: "pi", recup: null },
 ];
 
-function minPromo() {
-  const v = currentCourse().minPromo;
-  return typeof v === "number" ? v : 7;
+// Reglas de promocion de la materia
+const REGLAS = {
+  parcial: 8,      // nota minima en cada parcial para promocionar
+  prioridad: 7.5,  // 7,5 queda en prioridad: se le suma en el integrador para llegar a 8
+  recup: 9,        // en el recuperatorio hace falta 9 o 10; si no llega, va al final
+  integrador: 8,   // supuesto: el integrador tambien pide 8 o mas
+};
+
+// "ok" | "prioridad" | "recuperar" | "final" | null (sin nota)
+function estadoParcial(nota, recup) {
+  if (recup != null) return recup >= REGLAS.recup ? "ok" : "final";
+  if (nota == null) return null;
+  if (nota >= REGLAS.parcial) return "ok";
+  if (nota >= REGLAS.prioridad) return "prioridad";
+  return "recuperar";
 }
+
 
 function getGrade(exam, studentId) {
   const g = currentCourse().grades && currentCourse().grades[exam];
@@ -1119,7 +1132,17 @@ function gradeInfo(s) {
   CUENTAN.forEach(c => { efectiva[c.key] = c.recup && notas[c.recup] != null ? notas[c.recup] : notas[c.key]; });
   const cargadas = CUENTAN.map(c => efectiva[c.key]).filter(n => n != null);
   const promedio = cargadas.length ? cargadas.reduce((x, y) => x + y, 0) / cargadas.length : null;
-  const completo = cargadas.length === CUENTAN.length;
+  const estados = {
+    p1: estadoParcial(notas.p1, notas.r1),
+    p2: estadoParcial(notas.p2, notas.r2),
+    pi: notas.pi == null ? null : notas.pi >= REGLAS.integrador ? "ok" : "final",
+  };
+  const lista = Object.values(estados).filter(Boolean);
+  const cat = !lista.length ? "sin_notas"
+    : lista.includes("final") ? "final"
+    : lista.includes("recuperar") ? "recuperar"
+    : lista.includes("prioridad") ? "prioridad" : "ok";
+  const completo = lista.length === 3;
 
   let alerta = null;
   if (todas.length) {
@@ -1130,18 +1153,22 @@ function gradeInfo(s) {
   let situacion, pill;
   if (alerta) { situacion = "Revisar: " + alerta.toLowerCase(); pill = "libre"; }
   else if (s.status === "libre") { situacion = "Libre"; pill = "libre"; }
-  else if (completo) {
-    if (promedio >= minPromo()) { situacion = "Promociona"; pill = "al_dia"; }
-    else { situacion = "No promociona"; pill = "riesgo"; }
-  } else if (cargadas.length) { situacion = "En curso"; pill = "riesgo"; }
-  else { situacion = "Sin notas"; pill = ""; }
+  else if (cat === "final") { situacion = "Va al final"; pill = "final"; }
+  else if (cat === "recuperar") { situacion = "Debe recuperatorio"; pill = "riesgo"; }
+  else if (cat === "prioridad") { situacion = "Prioridad (7,5)"; pill = "info"; }
+  else if (cat === "ok") {
+    pill = "al_dia";
+    if (completo) situacion = "Promociona";
+    else if (estados.p1 && !estados.p2) situacion = "1er parcial aprobado";
+    else if (estados.p1 && estados.p2) situacion = "Falta integrador";
+    else situacion = "Van bien";
+  } else { situacion = "Sin notas"; pill = ""; }
 
-  return { clases, presentes, notas, efectiva, promedio, completo, alerta, situacion, pill };
+  return { clases, presentes, notas, efectiva, estados, cat, promedio, completo, alerta, situacion, pill };
 }
 
 function gradeSituationCells(gi) {
   return {
-    prom: gi.promedio == null ? '<span class="muted">&mdash;</span>' : `<strong>${fmtNota(gi.promedio)}</strong>${gi.completo ? "" : ' <span class="muted small">parcial</span>'}`,
     sit: `<span class="status-pill ${gi.pill}" ${gi.pill ? "" : 'style="background:var(--surface-2); color:var(--text-muted);"'}>${esc(gi.situacion)}</span>`,
   };
 }
@@ -1154,9 +1181,8 @@ function notasRows() {
     .filter(({ s }) => s.name.toLowerCase().includes(q))
     .filter(({ gi }) => {
       if (filter === "alerta") return !!gi.alerta;
-      if (filter === "promociona") return gi.situacion === "Promociona";
-      if (filter === "sin_nota") return !gi.completo;
-      return true;
+      if (filter === "todos") return true;
+      return gi.cat === filter;
     });
 }
 
@@ -1167,11 +1193,7 @@ function renderNotas() {
 
 // Alertas y tarjetas de arriba (se refrescan al cargar una nota sin repintar la tabla, para no perder el foco)
 function renderNotasSummary() {
-  document.getElementById("min-promo").value = minPromo();
-
   const all = studentsWithInfo().map(s => ({ s, gi: gradeInfo(s) }));
-  const total = all.length;
-
   const alertas = all.filter(x => x.gi.alerta);
   const box = document.getElementById("notas-alertas");
   box.innerHTML = alertas.length
@@ -1179,15 +1201,12 @@ function renderNotasSummary() {
         `<li>${esc(s.name)} &mdash; ${esc(gi.alerta)} (${EXAMS.filter(e => gi.notas[e.key] != null).map(e => `${e.short}: ${fmtNota(gi.notas[e.key])}`).join(", ")})</li>`).join("")}</ul></div>`
     : (all.some(x => x.gi.promedio != null) ? '<div class="notas-alert ok"><strong>Sin alertas</strong>Todos los alumnos con nota tienen asistencia que la respalda.</div>' : "");
 
-  const p1 = all.map(x => x.gi.efectiva.p1).filter(n => n != null);
-  const avgP1 = p1.length ? p1.reduce((a, b) => a + b, 0) / p1.length : null;
-  const promocionan = all.filter(x => x.gi.situacion === "Promociona").length;
-  const completos = all.filter(x => x.gi.completo).length;
+  const count = c => all.filter(x => x.gi.cat === c).length;
   document.getElementById("notas-stats").innerHTML = `
-    <div class="stat-card" data-idx="01"><div><p class="stat-label">Alumnos</p><p class="stat-value">${total}</p></div></div>
-    <div class="stat-card" data-idx="02"><div><p class="stat-label">Promedio 1er parcial</p><p class="stat-value">${avgP1 == null ? "&mdash;" : fmtNota(avgP1)}</p></div></div>
-    <div class="stat-card success" data-idx="03"><div><p class="stat-label">Promocionan</p><p class="stat-value">${promocionan}</p><p class="stat-label" style="text-transform:none; margin:2px 0 0;">de ${completos} con todo cargado</p></div></div>
-    <div class="stat-card danger" data-idx="04"><div><p class="stat-label">Con alerta</p><p class="stat-value">${alertas.length}</p></div></div>
+    <div class="stat-card success" data-idx="01"><div><p class="stat-label">Van bien</p><p class="stat-value">${count("ok")}</p></div></div>
+    <div class="stat-card" data-idx="02"><div><p class="stat-label">Prioridad 7,5</p><p class="stat-value">${count("prioridad")}</p></div></div>
+    <div class="stat-card warn" data-idx="03"><div><p class="stat-label">Deben recuperatorio</p><p class="stat-value">${count("recuperar")}</p></div></div>
+    <div class="stat-card danger" data-idx="04"><div><p class="stat-label">Van al final</p><p class="stat-value">${count("final")}</p></div></div>
   `;
 }
 
@@ -1223,7 +1242,6 @@ function notaCardHtml(s, gi) {
     <div class="nota-card-grid">
       ${EXAMS.map(e => `<div class="nota-card-exam ${e.key === "pi" ? "solo" : ""}"><p class="nota-card-label">${e.short}</p>${gradeInputHtml(s, e)}</div>`).join("")}
     </div>
-    <p class="nota-card-prom">Promedio: <span data-role="prom">${cells.prom}</span></p>
   </div>`;
 }
 
@@ -1241,7 +1259,7 @@ function renderNotasTable() {
   let html = `<table><thead><tr>
     <th>Alumno</th><th class="text-center">Asistencia</th>
     ${EXAMS.map(e => `<th class="text-center">${e.short}</th>`).join("")}
-    <th class="text-center">Promedio</th><th class="text-center">Situacion</th>
+    <th class="text-center">Situacion</th>
   </tr></thead><tbody>`;
   rows.forEach(({ s, gi }) => {
     const cells = gradeSituationCells(gi);
@@ -1249,7 +1267,6 @@ function renderNotasTable() {
       <td><div class="name-cell" onclick="openProfile(${s.id})"><div class="avatar ${s.status}">${initials(s.name)}</div>${esc(s.name)}</div></td>
       <td class="text-center"><span class="asist-mini" title="Clases a las que vino / clases registradas">${gi.presentes}/${gi.clases}</span> <span class="status-pill ${s.status}">${s.faltas} falta${s.faltas === 1 ? "" : "s"}</span></td>
       ${EXAMS.map(e => gradeCellHtml(s, e)).join("")}
-      <td class="text-center" data-role="prom">${cells.prom}</td>
       <td class="text-center" data-role="sit">${cells.sit}</td>
     </tr>`;
   });
@@ -1264,7 +1281,6 @@ function refreshNotaRow(studentId) {
   if (!s || !row) return;
   const gi = gradeInfo(s);
   const cells = gradeSituationCells(gi);
-  row.querySelector('[data-role="prom"]').innerHTML = cells.prom;
   const sit = row.querySelector('[data-role="sit"]');
   if (sit) sit.innerHTML = cells.sit;
   row.classList.toggle("row-alerta", !!gi.alerta);
@@ -1294,13 +1310,6 @@ function onTemaChange(exam, studentId, tema) {
 
 document.getElementById("search-notas").addEventListener("input", renderNotasTable);
 document.getElementById("notas-filter").addEventListener("change", renderNotasTable);
-document.getElementById("min-promo").addEventListener("change", e => {
-  const v = Number(String(e.target.value).replace(",", "."));
-  if (!Number.isFinite(v) || v < 1 || v > 10) { showToast("Elegi una nota entre 1 y 10", "error"); e.target.value = minPromo(); return; }
-  currentCourse().minPromo = v;
-  saveData();
-  renderNotas();
-});
 
 // Bloque de notas para la ficha del alumno
 function profileGradesHtml(s) {
@@ -1313,7 +1322,6 @@ function profileGradesHtml(s) {
   return `
     <p style="font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-secondary); margin: 0 0 9px;">Notas</p>
     <div style="margin-bottom:8px;">${lines}
-      <div class="grade-line"><span>Promedio</span><strong>${gi.promedio == null ? "&mdash;" : fmtNota(gi.promedio)}</strong></div>
       <div class="grade-line"><span>Asistio a</span><strong>${gi.presentes} de ${gi.clases} clases</strong></div>
       <div class="grade-line" style="border-bottom:none;"><span>Situacion</span><span class="status-pill ${gi.pill}" ${gi.pill ? "" : 'style="background:var(--surface-2); color:var(--text-muted);"'}>${esc(gi.situacion)}</span></div>
     </div>

@@ -164,15 +164,14 @@
         <div class="card-head">
           <h2>Notas del curso</h2>
           <div class="card-head-actions">
-            <label class="group-size-picker" title="Promedio minimo para promocionar">
-              <span>Promociona con</span>
-              <input type="number" id="min-promo" min="1" max="10" step="0.5" class="input-inline" style="width:70px; padding:6px 8px;">
-            </label>
             <select id="notas-filter" class="input-inline" style="padding:9px 10px;">
               <option value="todos">Todos</option>
               <option value="alerta">Con alerta</option>
-              <option value="promociona">Promocionan</option>
-              <option value="sin_nota">Faltan notas</option>
+              <option value="ok">Van bien</option>
+              <option value="prioridad">Prioridad 7,5</option>
+              <option value="recuperar">Deben recuperatorio</option>
+              <option value="final">Van al final</option>
+              <option value="sin_notas">Sin notas</option>
             </select>
             <div class="search-box"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text-muted); flex-shrink:0;"><circle cx="10.5" cy="10.5" r="6"/><line x1="15" y1="15" x2="20" y2="20"/></svg><input type="text" id="search-notas" placeholder="Buscar alumno..."></div>
           </div>
