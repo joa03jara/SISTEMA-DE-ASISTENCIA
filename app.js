@@ -389,11 +389,22 @@ const ATTENTION_MAX = 8;
 
 function attentionCard(title, hint, items, rowHtml) {
   return `<div class="card attention-card">
-    <div class="card-head"><h2>${title}</h2><span class="muted small">${items.length ? items.length : "Todo en orden"}</span></div>
+    <div class="card-head attention-head"><h2>${title}</h2><span class="attention-count ${items.length ? "" : "ok"}">${items.length ? items.length : "Todo en orden"}</span></div>
     <p class="muted small" style="padding: 10px 20px 0;">${hint}</p>
     <div class="attention-list">${items.length ? items.slice(0, ATTENTION_MAX).map(rowHtml).join("") : '<p class="muted small" style="padding: 10px 2px;">Nada para revisar.</p>'}
       ${items.length > ATTENTION_MAX ? `<p class="muted small" style="padding: 10px 8px 2px;">y ${items.length - ATTENTION_MAX} mas...</p>` : ""}</div>
   </div>`;
+}
+
+// Cuantas clases del curso tiene registradas cada alumno. Los que se sumaron despues arrancan con registro tarde.
+function attendanceCoverage(studentId) {
+  const att = currentCourse().attendance;
+  const dates = Object.keys(att).sort();
+  const registered = dates.filter(d => Object.prototype.hasOwnProperty.call(att[d], studentId));
+  const first = registered[0] || null;
+  const missingBefore = first ? dates.filter(d => d < first).length : dates.length;
+  const missingAfter = first ? dates.filter(d => d > first && !registered.includes(d)).length : 0;
+  return { total: dates.length, registered: registered.length, first, missingBefore, missingAfter, missing: dates.length - registered.length };
 }
 
 function renderPanelTable(students) {
@@ -406,6 +417,8 @@ function renderPanelTable(students) {
 
   const porFaltas = students.filter(s => s.status !== "al_dia").sort((x, y) => y.faltas - x.faltas);
   const conAlerta = students.map(s => ({ s, gi: gradeInfo(s) })).filter(x => x.gi.alerta);
+  const dates = Object.keys(currentCourse().attendance).sort();
+  const sinRegistro = students.map(s => ({ s, cov: attendanceCoverage(s.id) })).filter(x => x.cov.missing > 0).sort((x, y) => y.cov.missing - x.cov.missing);
   const tpsPend = students.filter(s => s.tpTotal > 0 && s.tpStatus !== "al_dia").sort((x, y) => (x.tpDone - x.tpTotal) - (y.tpDone - y.tpTotal));
 
   box.innerHTML = `<div class="attention-grid">
@@ -413,6 +426,10 @@ function renderPanelTable(students) {
       s => row(s, `<span class="status-pill ${s.status}">${s.faltas} falta${s.faltas === 1 ? "" : "s"} &middot; ${statusLabel(s.status)}</span>`))}
     ${attentionCard("Notas a revisar", "Tienen nota cargada pero no asistieron o estan libres. Se cargan en Notas.", conAlerta,
       ({ s, gi }) => row(s, `<span class="status-pill libre">${esc(gi.alerta)}</span>`))}
+    ${attentionCard("Asistencia incompleta", dates.length ? `Primera clase registrada: ${formatDateShort(dates[0])} (${dates.length} clases en total). Estos alumnos no tienen asistencia en todas; seguramente los agregaste despues.` : "Todavia no tomaste asistencia.", sinRegistro,
+      ({ s, cov }) => row(s, cov.first && cov.missingAfter === 0
+        ? `<span class="status-pill riesgo" title="No tiene registro de las ${cov.missingBefore} clases anteriores">Desde ${formatDateShort(cov.first)} &middot; ${cov.registered}/${cov.total}</span>`
+        : `<span class="status-pill riesgo">Sin marcar ${cov.missing} de ${cov.total}</span>`))}
     ${attentionCard("Trabajos practicos", "Alumnos que deben algun TP. Se marcan en Trabajos practicos.", tpsPend,
       s => row(s, tpPill(s)))}
   </div>`;
@@ -988,10 +1005,10 @@ function openProfile(id) {
         <p class="muted" style="margin:2px 0 0;">${esc(s.group_name || "Individual")}</p>
       </div>
     </div>
-    <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:9px; margin-bottom:18px;">
-      <div class="stat-card"><p class="stat-label">Faltas</p><p class="stat-value">${s.faltas} / ${LIMITE_FALTAS}</p></div>
-      <div class="stat-card"><p class="stat-label">Estado</p><p class="stat-value" style="font-size:15px;">${statusLabel(s.status)}</p></div>
-      <div class="stat-card"><p class="stat-label">Estado TP</p><p class="stat-value" style="font-size:15px;">${tpStatusLabel(s)}</p></div>
+    <div class="mini-stats">
+      <div class="mini-stat"><p class="mini-stat-label">Faltas</p><p class="mini-stat-value">${s.faltas} de ${LIMITE_FALTAS}</p></div>
+      <div class="mini-stat"><p class="mini-stat-label">Estado</p><p class="mini-stat-value"><span class="status-pill ${s.status}">${statusLabel(s.status)}</span></p></div>
+      <div class="mini-stat"><p class="mini-stat-label">Estado TP</p><p class="mini-stat-value"><span class="status-pill ${tpPillClass(s)}">${esc(tpStatusLabel(s))}</span></p></div>
     </div>
     ${profileGradesHtml(s)}
     <p style="font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-secondary); margin: 0 0 9px;">Trabajos practicos</p>
@@ -1031,8 +1048,17 @@ document.getElementById("modal-overlay").addEventListener("click", e => {
 
 const EXAMS = [
   { key: "p1", label: "1er parcial", short: "1er parcial", tema: true },
+  { key: "r1", label: "Recuperatorio 1er parcial", short: "Recup. 1er", tema: false },
   { key: "p2", label: "2do parcial", short: "2do parcial", tema: true },
+  { key: "r2", label: "Recuperatorio 2do parcial", short: "Recup. 2do", tema: false },
   { key: "pi", label: "Proyecto integrador", short: "Integrador", tema: false },
+];
+
+// Notas que cuentan para el promedio: el recuperatorio reemplaza a la nota del parcial cuando existe
+const CUENTAN = [
+  { key: "p1", recup: "r1" },
+  { key: "p2", recup: "r2" },
+  { key: "pi", recup: null },
 ];
 
 function minPromo() {
@@ -1088,12 +1114,15 @@ function gradeInfo(s) {
   });
   const notas = {};
   EXAMS.forEach(e => { const g = getGrade(e.key, s.id); notas[e.key] = g && g.nota != null ? g.nota : null; });
-  const cargadas = EXAMS.map(e => notas[e.key]).filter(n => n != null);
+  const todas = EXAMS.map(e => notas[e.key]).filter(n => n != null); // cualquier nota cargada (para las alertas)
+  const efectiva = {};
+  CUENTAN.forEach(c => { efectiva[c.key] = c.recup && notas[c.recup] != null ? notas[c.recup] : notas[c.key]; });
+  const cargadas = CUENTAN.map(c => efectiva[c.key]).filter(n => n != null);
   const promedio = cargadas.length ? cargadas.reduce((x, y) => x + y, 0) / cargadas.length : null;
-  const completo = cargadas.length === EXAMS.length;
+  const completo = cargadas.length === CUENTAN.length;
 
   let alerta = null;
-  if (cargadas.length) {
+  if (todas.length) {
     if (clases > 0 && presentes === 0) alerta = "Nunca asistio";
     else if (s.status === "libre") alerta = `Libre por faltas (${s.faltas})`;
   }
@@ -1107,7 +1136,7 @@ function gradeInfo(s) {
   } else if (cargadas.length) { situacion = "En curso"; pill = "riesgo"; }
   else { situacion = "Sin notas"; pill = ""; }
 
-  return { clases, presentes, notas, promedio, completo, alerta, situacion, pill };
+  return { clases, presentes, notas, efectiva, promedio, completo, alerta, situacion, pill };
 }
 
 function gradeSituationCells(gi) {
@@ -1150,7 +1179,7 @@ function renderNotasSummary() {
         `<li>${esc(s.name)} &mdash; ${esc(gi.alerta)} (${EXAMS.filter(e => gi.notas[e.key] != null).map(e => `${e.short}: ${fmtNota(gi.notas[e.key])}`).join(", ")})</li>`).join("")}</ul></div>`
     : (all.some(x => x.gi.promedio != null) ? '<div class="notas-alert ok"><strong>Sin alertas</strong>Todos los alumnos con nota tienen asistencia que la respalda.</div>' : "");
 
-  const p1 = all.map(x => x.gi.notas.p1).filter(n => n != null);
+  const p1 = all.map(x => x.gi.efectiva.p1).filter(n => n != null);
   const avgP1 = p1.length ? p1.reduce((a, b) => a + b, 0) / p1.length : null;
   const promocionan = all.filter(x => x.gi.situacion === "Promociona").length;
   const completos = all.filter(x => x.gi.completo).length;
@@ -1192,7 +1221,7 @@ function notaCardHtml(s, gi) {
     </div>
     <p class="nota-card-sub"><span class="asist-mini">Vino ${gi.presentes}/${gi.clases}</span> <span class="status-pill ${s.status}">${s.faltas} falta${s.faltas === 1 ? "" : "s"}</span></p>
     <div class="nota-card-grid">
-      ${EXAMS.map(e => `<div class="nota-card-exam"><p class="nota-card-label">${e.short}</p>${gradeInputHtml(s, e)}</div>`).join("")}
+      ${EXAMS.map(e => `<div class="nota-card-exam ${e.key === "pi" ? "solo" : ""}"><p class="nota-card-label">${e.short}</p>${gradeInputHtml(s, e)}</div>`).join("")}
     </div>
     <p class="nota-card-prom">Promedio: <span data-role="prom">${cells.prom}</span></p>
   </div>`;
@@ -1273,70 +1302,6 @@ document.getElementById("min-promo").addEventListener("change", e => {
   renderNotas();
 });
 
-// --- Importacion de listas pegadas ---
-
-function normName(str) {
-  return String(str).normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z\s]/g, " ").split(/\s+/).filter(Boolean);
-}
-
-// Encuentra al alumno por nombre sin importar tildes ni el orden (Apellido Nombre / Nombre Apellido)
-function findStudentByName(name) {
-  const target = normName(name);
-  if (!target.length) return null;
-  const list = currentCourse().students.map(s => ({ s, tokens: normName(s.name) }));
-  const key = t => t.slice().sort().join(" ");
-  const exact = list.filter(x => key(x.tokens) === key(target));
-  if (exact.length === 1) return exact[0].s;
-  const subset = list.filter(x => target.every(t => x.tokens.includes(t)) || x.tokens.every(t => target.includes(t)));
-  return subset.length === 1 ? subset[0].s : null;
-}
-
-function parseGradeLines(text) {
-  const parsed = [], bad = [];
-  text.split("\n").map(l => l.trim()).filter(Boolean).forEach(line => {
-    const m = line.match(/^(.+?)\s+(?:tema\s*([A-Za-z])\s+)?(\d+(?:[.,]\d+)?)\s*$/i);
-    const nota = m ? parseNota(m[3]) : undefined;
-    if (!m || nota == null) { bad.push(line); return; }
-    parsed.push({ name: m[1].trim(), tema: m[2] ? m[2].toUpperCase() : null, nota });
-  });
-  return { parsed, bad };
-}
-
-document.getElementById("btn-import-notas").addEventListener("click", debounceClick(async () => {
-  const exam = document.getElementById("import-exam").value;
-  const { parsed, bad } = parseGradeLines(document.getElementById("notas-bulk").value);
-  if (!parsed.length) { showToast("No encontre filas con nombre y nota. Pega una por linea.", "error"); return; }
-
-  const unmatched = [];
-  let loaded = 0;
-  parsed.forEach(row => {
-    const student = findStudentByName(row.name);
-    if (!student) { unmatched.push(row); return; }
-    setGrade(exam, student.id, { nota: row.nota, ...(row.tema ? { tema: row.tema } : {}) });
-    loaded++;
-  });
-
-  let created = 0;
-  if (unmatched.length) {
-    const ok = await showConfirm(`No encontre en el curso a ${unmatched.length} alumno${unmatched.length === 1 ? "" : "s"}: ${unmatched.map(u => u.name).join(", ")}. Los agrego como alumnos nuevos con su nota?`, "Agregar");
-    if (ok) {
-      unmatched.forEach(row => {
-        if (nameTaken(currentCourse().students, row.name)) return;
-        const id = newId();
-        currentCourse().students.push({ id, name: row.name, groupId: null, notes: "" });
-        setGrade(exam, id, { nota: row.nota, ...(row.tema ? { tema: row.tema } : {}) });
-        created++;
-      });
-    }
-  }
-
-  saveData();
-  document.getElementById("notas-bulk").value = "";
-  renderNotas();
-  const skipped = unmatched.length - created;
-  showToast(`Notas cargadas: ${loaded}` + (created ? `, alumnos nuevos: ${created}` : "") + (skipped > 0 ? `, sin cargar: ${skipped}` : "") + (bad.length ? `, lineas ignoradas: ${bad.length}` : ""), "success");
-}));
-
 // Bloque de notas para la ficha del alumno
 function profileGradesHtml(s) {
   const gi = gradeInfo(s);
@@ -1350,8 +1315,9 @@ function profileGradesHtml(s) {
     <div style="margin-bottom:8px;">${lines}
       <div class="grade-line"><span>Promedio</span><strong>${gi.promedio == null ? "&mdash;" : fmtNota(gi.promedio)}</strong></div>
       <div class="grade-line"><span>Asistio a</span><strong>${gi.presentes} de ${gi.clases} clases</strong></div>
+      <div class="grade-line" style="border-bottom:none;"><span>Situacion</span><span class="status-pill ${gi.pill}" ${gi.pill ? "" : 'style="background:var(--surface-2); color:var(--text-muted);"'}>${esc(gi.situacion)}</span></div>
     </div>
-    <p style="margin:0 0 20px;"><span class="status-pill ${gi.pill}">${esc(gi.situacion)}</span></p>`;
+    <div style="height:14px;"></div>`;
 }
 
 // ---------- Cursos ----------
