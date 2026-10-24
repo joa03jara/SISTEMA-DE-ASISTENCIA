@@ -1215,7 +1215,7 @@ function gradeInputHtml(s, exam, withTema = true) {
   const nota = g && g.nota != null ? g.nota : null;
   const tema = g && g.tema ? g.tema : "";
   const temaSel = exam.tema && withTema ? `<select class="tema-select" title="Tema del examen" onchange="onTemaChange('${exam.key}', ${s.id}, this.value)">
-      ${["", "A", "B", "C", "D"].map(t => `<option value="${t}" ${t === tema ? "selected" : ""}>${t || "Tema"}</option>`).join("")}
+      ${["", "A", "B", "C"].map(t => `<option value="${t}" ${t === tema ? "selected" : ""}>${t || "Tema"}</option>`).join("")}
     </select>` : "";
   return `<div class="nota-cell">${temaSel}
     <input class="nota-input ${notaClass(nota)}" inputmode="decimal" value="${fmtNota(nota)}" placeholder="&mdash;" aria-label="${esc(exam.label)} de ${esc(s.name)}"
