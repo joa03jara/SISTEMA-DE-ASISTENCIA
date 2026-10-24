@@ -706,3 +706,6 @@
   #table-notas table .nota-input { width: 48px; font-size: 13px; padding: 6px 2px; }
   #table-notas table .nota-cell { gap: 3px; }
   #table-notas table th { white-space: normal; line-height: 1.25; font-size: 10px; }
+
+  .status-pill.info { background: var(--accent-light); color: var(--accent-dark); }
+  .status-pill.final { background: #efe6fb; color: #5b2d9c; }
