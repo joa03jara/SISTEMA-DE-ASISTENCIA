@@ -576,14 +576,14 @@ function renderAttendanceHistory() {
       const hasRecord = Object.prototype.hasOwnProperty.call(dayRecord, s.id);
       let mark;
       if (!hasRecord) {
-        mark = `<span class="hist-mark" style="background:var(--surface-2); color:var(--text-muted);">&mdash;</span>`;
+        mark = `<span class="hist-mark" style="background:var(--surface-2); color:var(--text-muted);" title="Sin marcar: toca para marcar">&mdash;</span>`;
       } else if (dayRecord[s.id] === false) {
         faltas++;
         mark = `<span class="hist-mark absent">${ICON_X}</span>`;
       } else {
         mark = `<span class="hist-mark present">${ICON_CHECK}</span>`;
       }
-      html += `<td class="text-center">${mark}</td>`;
+      html += `<td class="text-center hist-cell" onclick="cycleMark(${s.id}, '${date}')">${mark}</td>`;
     });
     html += `<td class="text-center faltas-count">${faltas}</td></tr>`;
   });
@@ -627,6 +627,23 @@ function renderAttendanceList() {
         </div>
       </div>`;
     }).join("");
+}
+
+// Marca a un alumno en una fecha: true = presente, false = ausente, null = sin marca
+function setMark(studentId, date, value) {
+  const att = currentCourse().attendance;
+  if (!att[date]) att[date] = {};
+  if (value === null) delete att[date][studentId];
+  else att[date][studentId] = value;
+  if (!Object.keys(att[date]).length) delete att[date]; // un dia sin ninguna marca deja de existir
+  saveData();
+}
+
+// sin marca -> presente -> ausente -> sin marca
+function cycleMark(studentId, date) {
+  const cur = (currentCourse().attendance[date] || {})[studentId];
+  setMark(studentId, date, cur === undefined ? true : cur === true ? false : null);
+  renderAttendanceHistory();
 }
 
 function setPresent(id, present) {
@@ -992,6 +1009,36 @@ function saveGroupEdit() {
 
 // ---------- Student profile modal ----------
 
+function profileAttendanceHtml(s) {
+  const att = currentCourse().attendance;
+  const dates = Object.keys(att).sort().reverse();
+  if (!dates.length) return "";
+  const dayName = d => { const [y, m, dd] = d.split("-").map(Number); return new Date(y, m - 1, dd).toLocaleDateString("es", { weekday: "short" }); };
+  const rows = dates.map(d => {
+    const v = att[d][s.id];
+    return `<div class="mark-row">
+      <span>${dayName(d)} ${formatDateShort(d)}</span>
+      <div class="mark-btns">
+        <button class="mark-btn present ${v === true ? "active" : ""}" onclick="profileSetMark(${s.id}, '${d}', true)">${ICON_CHECK} Fue</button>
+        <button class="mark-btn absent ${v === false ? "active" : ""}" onclick="profileSetMark(${s.id}, '${d}', false)">${ICON_X} No fue</button>
+        <button class="mark-btn none ${v === undefined ? "active" : ""}" onclick="profileSetMark(${s.id}, '${d}', null)" title="Sin marcar">&mdash;</button>
+      </div>
+    </div>`;
+  }).join("");
+  return `<p style="font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-secondary); margin: 0 0 6px;">Asistencia por clase</p>
+    <p class="muted small" style="margin:0 0 8px;">Marca si fue o no a cada clase. "&mdash;" deja la clase sin marcar.</p>
+    <div class="mark-list">${rows}</div>
+    <div style="height:18px;"></div>`;
+}
+
+function profileSetMark(studentId, date, value) {
+  const box = document.getElementById("modal-content");
+  const top = box.scrollTop;
+  setMark(studentId, date, value);
+  openProfile(studentId);
+  box.scrollTop = top;
+}
+
 function openProfile(id) {
   const s = studentsWithInfo().find(x => x.id === id);
   if (!s) return;
@@ -1011,6 +1058,7 @@ function openProfile(id) {
       <div class="mini-stat"><p class="mini-stat-label">Estado TP</p><p class="mini-stat-value"><span class="status-pill ${tpPillClass(s)}">${esc(tpStatusLabel(s))}</span></p></div>
     </div>
     ${profileGradesHtml(s)}
+    ${profileAttendanceHtml(s)}
     <p style="font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-secondary); margin: 0 0 9px;">Trabajos practicos</p>
     <div style="display:flex; flex-direction:column; gap:6px; margin-bottom:20px;">
       ${s.tps.length ? s.tps.map(t => `
@@ -1028,7 +1076,14 @@ function openProfile(id) {
   overlay.classList.remove("hidden");
 }
 
-function closeModal() { document.getElementById("modal-overlay").classList.add("hidden"); }
+function closeModal() {
+  document.getElementById("modal-overlay").classList.add("hidden");
+  // la ficha puede haber cambiado asistencia: refresca la pantalla de atras
+  if (view === "panel") renderPanel();
+  if (view === "alumnos") renderStudentsTable();
+  if (view === "notas") renderNotas();
+  if (view === "asistencia") { renderAttendanceList(); renderAttendanceHistory(); }
+}
 
 function saveNotes(id) {
   const notes = document.getElementById("notes-field").value;

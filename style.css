@@ -709,3 +709,14 @@
 
   .status-pill.info { background: var(--accent-light); color: var(--accent-dark); }
   .status-pill.final { background: #efe6fb; color: #5b2d9c; }
+
+  .hist-cell { cursor: pointer; }
+  .hist-cell:hover .hist-mark { outline: 2px solid var(--accent); }
+  .mark-list { max-height: 260px; overflow-y: auto; border: 1px solid var(--line); border-radius: 10px; }
+  .mark-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 7px 10px; border-bottom: 1px solid var(--line); font-size: 13.5px; text-transform: capitalize; }
+  .mark-row:last-child { border-bottom: none; }
+  .mark-btns { display: flex; gap: 5px; }
+  .mark-btn { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--line); background: var(--paper-raised); color: var(--text-secondary); border-radius: 8px; padding: 6px 9px; font-size: 12.5px; font-family: var(--font-body); font-weight: 600; cursor: pointer; text-transform: none; }
+  .mark-btn.present.active { background: var(--success-light); color: var(--success-dark); border-color: transparent; }
+  .mark-btn.absent.active { background: var(--coral-light); color: var(--coral-dark); border-color: transparent; }
+  .mark-btn.none.active { background: var(--surface-2); color: var(--text-primary); }
