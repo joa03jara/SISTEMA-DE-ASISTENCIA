@@ -543,6 +543,16 @@ function formatDateShort(dateStr) {
   return `${d}/${m}`;
 }
 
+function weekdayOf(dateStr) {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return new Date(y, m - 1, d).getDay(); // 0 domingo ... 6 sabado
+}
+
+const DIAS_CLASE = [3, 5]; // miercoles y viernes
+function dayShort(dateStr) {
+  return ["Dom", "Lun", "Mar", "Mie", "Jue", "Vie", "Sab"][weekdayOf(dateStr)];
+}
+
 function renderAttendanceHistory() {
   const query = (document.getElementById("search-historial").value || "").toLowerCase();
   const dates = Object.keys(currentCourse().attendance).sort();
@@ -561,9 +571,11 @@ function renderAttendanceHistory() {
   let html = '<div class="history-table-wrap"><table class="history-table"><thead><tr>';
   html += '<th class="sticky-col">Alumno</th>';
   dates.forEach(date => {
-    html += `<th class="date-col text-center" title="Toca la fecha para editar ese dia">
-      <span onclick="goToDate('${date}')">${formatDateShort(date)}</span>
-      <button class="hist-date-del" title="Eliminar la asistencia de este dia" onclick="event.stopPropagation(); deleteAttendanceDate('${date}')">${ICON_TRASH}</button>
+    const odd = !DIAS_CLASE.includes(weekdayOf(date));
+    html += `<th class="date-col text-center ${odd ? "odd-day" : ""}" title="${odd ? "No es miercoles ni viernes: tocá el lapiz para corregir la fecha. " : ""}Toca la fecha para editar ese dia">
+      <span onclick="goToDate('${date}')">${dayShort(date)}<br>${formatDateShort(date)}</span>
+      <button class="hist-date-del edit" title="Cambiar la fecha de este dia" onclick="event.stopPropagation(); openMoveDate('${date}')">${ICON_PENCIL}</button>
+      <button class="hist-date-del del" title="Eliminar la asistencia de este dia" onclick="event.stopPropagation(); deleteAttendanceDate('${date}')">${ICON_TRASH}</button>
     </th>`;
   });
   html += '<th class="text-center">Faltas</th></tr></thead><tbody>';
@@ -593,6 +605,34 @@ function renderAttendanceHistory() {
 }
 
 document.getElementById("search-historial").addEventListener("input", renderAttendanceHistory);
+
+// Corregir la fecha de un dia de asistencia (por ejemplo, si quedo guardado un dia despues)
+function openMoveDate(date) {
+  document.getElementById("modal-content").innerHTML = `
+    <button class="modal-close" onclick="closeModal()">Cerrar</button>
+    <p style="font-family: var(--font-display); font-weight:700; font-size:16px; margin:0 0 4px;">Cambiar fecha de la clase</p>
+    <p class="muted small" style="margin:0 0 14px;">La asistencia del ${dayShort(date)} ${formatDateShort(date)} se pasa a la fecha que elijas. No se pierde ninguna marca.</p>
+    <input type="date" id="move-date-input" class="input-inline" style="width:100%;" value="${date}">
+    <div class="confirm-actions" style="margin-top:18px;">
+      <button class="btn" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-accent" onclick="moveAttendanceDate('${date}')">Guardar fecha</button>
+    </div>`;
+  document.getElementById("modal-overlay").classList.remove("hidden");
+}
+
+function moveAttendanceDate(oldDate) {
+  const newDate = document.getElementById("move-date-input").value;
+  if (!newDate) { showToast("Elegi una fecha", "error"); return; }
+  if (newDate === oldDate) { closeModal(); return; }
+  const att = currentCourse().attendance;
+  if (att[newDate]) { showToast("Ya hay asistencia cargada ese dia. Elegi otra fecha o eliminala primero.", "error"); return; }
+  att[newDate] = att[oldDate];
+  delete att[oldDate];
+  if (pendingAttendance[oldDate]) { pendingAttendance[newDate] = pendingAttendance[oldDate]; delete pendingAttendance[oldDate]; }
+  saveData();
+  closeModal();
+  showToast(`Asistencia pasada al ${dayShort(newDate)} ${formatDateShort(newDate)}`, "success");
+}
 
 async function deleteAttendanceDate(date) {
   const ok = await showConfirm(`Eliminar toda la asistencia del ${formatDateShort(date)}? Esto no se puede deshacer.`);

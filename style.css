@@ -720,3 +720,9 @@
   .mark-btn.present.active { background: var(--success-light); color: var(--success-dark); border-color: transparent; }
   .mark-btn.absent.active { background: var(--coral-light); color: var(--coral-dark); border-color: transparent; }
   .mark-btn.none.active { background: var(--surface-2); color: var(--text-primary); }
+
+  table.history-table th.odd-day { color: var(--coral-dark); background: var(--coral-light); }
+  table.history-table th.date-col { line-height: 1.25; }
+  .hist-date-del.edit { top: 30%; }
+  .hist-date-del.del { top: 70%; }
+  .hist-date-del.edit:hover { color: var(--accent); background: var(--accent-light); }
