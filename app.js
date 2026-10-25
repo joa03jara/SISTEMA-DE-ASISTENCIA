@@ -167,10 +167,12 @@ function statusLabel(status) {
   return "Libre";
 }
 
+// Todos arrancan el mismo dia: cada clase tomada cuenta para todos, y si alguien no tiene marca ese dia
+// (por ejemplo, lo agregaste despues) se cuenta como ausente.
 function faltasFor(studentId) {
   let count = 0;
   Object.values(currentCourse().attendance).forEach(day => {
-    if (day[studentId] === false) count++;
+    if (day[studentId] !== true) count++;
   });
   return count;
 }
@@ -426,10 +428,10 @@ function renderPanelTable(students) {
       s => row(s, `<span class="status-pill ${s.status}">${s.faltas} falta${s.faltas === 1 ? "" : "s"} &middot; ${statusLabel(s.status)}</span>`))}
     ${attentionCard("Notas a revisar", "Tienen nota cargada pero no asistieron o estan libres. Se cargan en Notas.", conAlerta,
       ({ s, gi }) => row(s, `<span class="status-pill libre">${esc(gi.alerta)}</span>`))}
-    ${attentionCard("Asistencia incompleta", dates.length ? `Primera clase registrada: ${formatDateShort(dates[0])} (${dates.length} clases en total). Estos alumnos no tienen asistencia en todas; seguramente los agregaste despues.` : "Todavia no tomaste asistencia.", sinRegistro,
+    ${attentionCard("Sin registro de clases", dates.length ? `Primera clase: ${formatDateShort(dates[0])} (${dates.length} clases en total). Estos alumnos no tienen marca en algunas; esas clases cuentan como ausente.` : "Todavia no tomaste asistencia.", sinRegistro,
       ({ s, cov }) => row(s, cov.first && cov.missingAfter === 0
-        ? `<span class="status-pill riesgo" title="No tiene registro de las ${cov.missingBefore} clases anteriores">Desde ${formatDateShort(cov.first)} &middot; ${cov.registered}/${cov.total}</span>`
-        : `<span class="status-pill riesgo">Sin marcar ${cov.missing} de ${cov.total}</span>`))}
+        ? `<span class="status-pill riesgo" title="No tiene registro de las ${cov.missingBefore} clases anteriores">Desde ${formatDateShort(cov.first)} &middot; ${cov.missing} sin marca</span>`
+        : `<span class="status-pill riesgo">${cov.missing} sin marca</span>`))}
     ${attentionCard("Trabajos practicos", "Alumnos que deben algun TP. Se marcan en Trabajos practicos.", tpsPend,
       s => row(s, tpPill(s)))}
   </div>`;
@@ -576,7 +578,8 @@ function renderAttendanceHistory() {
       const hasRecord = Object.prototype.hasOwnProperty.call(dayRecord, s.id);
       let mark;
       if (!hasRecord) {
-        mark = `<span class="hist-mark" style="background:var(--surface-2); color:var(--text-muted);">&mdash;</span>`;
+        faltas++;
+        mark = `<span class="hist-mark absent" style="opacity:0.45;" title="Sin registro: cuenta como ausente">${ICON_X}</span>`;
       } else if (dayRecord[s.id] === false) {
         faltas++;
         mark = `<span class="hist-mark absent">${ICON_X}</span>`;
@@ -1120,10 +1123,8 @@ function notaClassOf(text) {
 function gradeInfo(s) {
   let clases = 0, presentes = 0;
   Object.values(currentCourse().attendance).forEach(day => {
-    if (Object.prototype.hasOwnProperty.call(day, s.id)) {
-      clases++;
-      if (day[s.id] === true) presentes++;
-    }
+    clases++;
+    if (day[s.id] === true) presentes++;
   });
   const notas = {};
   EXAMS.forEach(e => { const g = getGrade(e.key, s.id); notas[e.key] = g && g.nota != null ? g.nota : null; });
